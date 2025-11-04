@@ -25,7 +25,7 @@ end
 getmethod(meta::UniSGPMeta) = meta.method
 getInducingInput(meta::UniSGPMeta) = meta.Xu
 getKernel(meta::UniSGPMeta) = meta.kernel
-getΨ0(meta::UniSGPMeta) = meta.Ψ0 
+getΨ0(meta::UniSGPMeta) = meta.Ψ0
 getΨ1_trans(meta::UniSGPMeta) = meta.Ψ1_trans
 getΨ2(meta::UniSGPMeta) = meta.Ψ2
 getUv(meta::UniSGPMeta) = meta.Uv # Cholesky upper triangular of Rv = μ_v * μ_v' + Σ_v
@@ -34,7 +34,7 @@ getcounter(meta::UniSGPMeta) = meta.counter
 getN(meta::UniSGPMeta) = meta.N #number of observations
 
 
-#---- Define average energy ----#
+#---- Define average energy ----# TEST
 #### general case 
 @average_energy UniSGP (q_out::UnivariateNormalDistributionsFamily, q_in::UnivariateGaussianDistributionsFamily, q_v::MultivariateNormalDistributionsFamily, q_w::GammaShapeRate,q_θ::PointMass, meta::UniSGPMeta,) = begin
     w_bar = mean(q_w)
