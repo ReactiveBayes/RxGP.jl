@@ -27,10 +27,7 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
     Kuu_inverse = inv(kernelmatrix(kernel(θ_val),Xu))
     gt_logbackwardmess = (x,y) -> -0.5 * w * (Ψ0(x) + tr(Ψ2(x) * (R_v - Kuu_inverse)) ) + w * y * dot(Ψ1(x), μ_v)
 
-    gt_negllh = 0.0
-    for i=1:length(xdata)
-        gt_negllh += gt_logbackwardmess(xdata[i],ydata[i])
-    end
+    gt_negllh = sum(gt_logbackwardmess(x, y) for (x, y) in zip(xdata, ydata))
     Uv = cholesky(R_v).U
     approx_negllh = neg_log_backwardmess_fast(θ_val; y_data=ydata, x_data=xdata, v=μ_v, Uv=Uv, w=w, kernel=kernel, Xu=Xu)
     @test isapprox(-gt_negllh,approx_negllh;atol=1e-6)
