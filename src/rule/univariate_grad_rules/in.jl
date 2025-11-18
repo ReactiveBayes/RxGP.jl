@@ -23,7 +23,8 @@
     part_A = (x) -> tr(Wg_bar * Qx(x))
     part_B = (x) -> - 2 * transpose(μ_ω) * Wg_bar * ( Ex(x) + Cx(x) * (μ_v - Ku_mxu) )
     part_C = (x) -> (
-        tr(Rv * CTWC(x))
+        transpose(Ex(x)) * Wg_bar * Ex(x)
+        + tr(Rv * CTWC(x))
         + (transpose(Ku_mxu) - 2 * transpose(μ_v)) * CTWC_Ku_mxu(x)
         + 2 * transpose(Ex(x)) * WC(x) * (μ_v - Ku_mxu)
     )
