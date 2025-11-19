@@ -1,7 +1,5 @@
-using ReactiveMP
-import ReactiveMP: getweights, getpoints, approximate_meancov, approximate_kernel_expectation
-
 export approximate_kernel_expectation!, approximate_kernel_expectation
+
 # univariate case 
 function ReactiveMP.prod(::GenericProd, left::UnivariateGaussianDistributionsFamily, right::ContinuousUnivariateLogPdf) 
     m,v = approximate_meancov(ghcubature(21),(x) -> exp(right.logpdf(x)),left)

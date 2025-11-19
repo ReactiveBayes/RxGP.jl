@@ -13,7 +13,7 @@
     Ωx = Ex(μ_in)
     Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
 
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    Ku_mxu = meta.KuuF \ mxu
     Ω3 = transpose(Ω1) * Wg_bar * Ω1
     Ω4 = transpose(Ωx) * Wg_bar * Ω1
 

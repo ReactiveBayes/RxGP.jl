@@ -11,7 +11,7 @@
     Dxθ = getDxθ(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    Ku_mxu = meta.KuuF \ mxu
     Ω0 = (θ) -> Dxθ(μ_in, θ, meta.kernel)
     Ω1 = (θ) -> Cxθ_Xu(μ_in, θ, meta.Xu)
     Ω2 = (θ) -> transpose(Ω1(θ)) * Ω1(θ)

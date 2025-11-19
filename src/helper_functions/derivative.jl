@@ -1,6 +1,4 @@
 # Define gradient functions for hyperparameter optimization
-using ForwardDiff, KernelFunctions
-using LinearAlgebra
 
 export neg_log_backwardmess_fast, neg_log_backwardmess_uncertain, grad_llh_default!, grad_llh_new!, grad_llh_uncertain!
 export neg_log_backwardmess_multi, grad_llh_multi, grad_llh_multi!

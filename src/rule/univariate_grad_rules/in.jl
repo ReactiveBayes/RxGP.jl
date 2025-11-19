@@ -10,11 +10,11 @@
     Dxθ = getDxθ(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    Ku_mxu = meta.KuuF \ mxu
     Dx = (x) -> Dxθ(x, θ)
     Cx = (x) -> Cxθ_Xu(x, θ, meta.Xu)
     CxT = (x) -> transpose(Cx(x))
-    Qx = (x) -> Dx(x) - Cx(x) * ((meta.KuuL * transpose(meta.KuuL)) \ transpose(Cx(x)))
+    Qx = (x) -> Dx(x) - Cx(x) * (meta.KuuF \ transpose(Cx(x)))
     Rv = μ_v * transpose(μ_v) + Σ_v
     WC = (x) -> Wg_bar * Cx(x)
     CTWC = (x) -> CxT(x) * Wg_bar * Cx(x)

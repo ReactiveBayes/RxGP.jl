@@ -18,7 +18,7 @@ Returns
         means::Vector{<:Real}: predictive means m_f for each input in m_in.
         vars::Vector{<:Real}: predictive marginal variances V_f for each input in m_in.
 """
-function predict_GP_values(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
+function predict_GP_values(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
     θ = typeof(q_θ) <: Union{MultivariateNormalDistributionsFamily, PointMass} ? mean(q_θ) : q_θ
     μ_v, Σ_v = mean_cov(q_v)
     mf = getMeanFn(meta)
@@ -27,8 +27,8 @@ function predict_GP_values(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::
     kernel = getKernel(meta)
 
     mxu = apply_mean_fn.(meta.Xu, mf)
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
-    Kuu_inv = (meta.KuuL * transpose(meta.KuuL)) \ I
+    Ku_mxu = meta.KuuF \ mxu
+    Kuu_inv = meta.KuuF \ I
     
     mx_ = apply_mean_fn.(m_in, mf)
     kxx = kernelmatrix_diag(kernel(θ), m_in)
@@ -68,7 +68,7 @@ Returns
         grad_means::Vector{<:AbstractVector}: gradient mean vector m_g for each input (dimension equals input dimension).
         grad_covs::Vector{<:AbstractMatrix}: gradient covariance matrix C_g for each input (d×d).
 """
-function predict_GP_gradients(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
+function predict_GP_gradients(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
     θ = typeof(q_θ) <: Union{MultivariateNormalDistributionsFamily, PointMass} ? mean(q_θ) : q_θ
     μ_v, Σ_v = mean_cov(q_v)
     mf = getMeanFn(meta)
@@ -81,8 +81,8 @@ function predict_GP_gradients(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_
     Cx = (x) -> Cxθ_Xu(x, θ, Xu)
 
     mxu = apply_mean_fn.(meta.Xu, mf)
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
-    Kuu_inv = (meta.KuuL * transpose(meta.KuuL)) \ I
+    Ku_mxu = meta.KuuF \ mxu
+    Kuu_inv = meta.KuuF \ I
 
     E_ = Ex.(m_in)
     D_ = Dx.(m_in)
@@ -122,7 +122,7 @@ Returns
         means::Matrix: N×(1+d) matrix where each row is [m_f, m_g...], for N = length(m_in) and input dimension d.
         covs::Array{<:Real,3}: N×(1+d)×(1+d) stack of joint covariance matrices with blocks [V_f C_fg; C_gf C_g].
 """
-function predict_GP_joints(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
+function predict_GP_joints(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::MultivariateNormalDistributionsFamily, q_θ::Any, meta::UniSGPMeta,)
     θ = typeof(q_θ) <: Union{MultivariateNormalDistributionsFamily, PointMass} ? mean(q_θ) : q_θ
     μ_v, Σ_v = mean_cov(q_v)
     mf = getMeanFn(meta)
@@ -138,8 +138,8 @@ function predict_GP_joints(m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v::
     kernel = getKernel(meta)
 
     mxu = apply_mean_fn.(meta.Xu, mf)
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
-    Kuu_inv = (meta.KuuL * transpose(meta.KuuL)) \ I
+    Ku_mxu = meta.KuuF \ mxu
+    Kuu_inv = meta.KuuF \ I
 
     mx_ = apply_mean_fn.(m_in, mf)
     kxx = kernelmatrix_diag(kernel(θ), m_in)

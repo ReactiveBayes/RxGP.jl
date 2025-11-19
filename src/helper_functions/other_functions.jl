@@ -196,14 +196,15 @@ end
 
 # ======= Single source of meta information ======= #
 
-function get_GP_meta(D; mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
+function get_GP_meta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
     θ = typeof(θ) <: PointMass ? mean(θ) : θ
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
-    KuuL = fastcholesky(Kuu).L
-    x_dummy = randn(D)
-    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])
+    KuuF = fastcholesky(Kuu)
+    x_dummy = zeros(D)
+    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
     Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
     Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu);
+    Uv = zeros(size(Xu,1), size(Xu,1))
 
     @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
     Ex = get_Ex(;mean_fn=mean_fn)
@@ -213,7 +214,7 @@ function get_GP_meta(D; mean_fn, kernel, kernel_spec, mode, independent_SE_lengt
 
     dims_theta = length(θ)
 
-    return UniSGPMeta(nothing, mean_fn, Xu, Ψ0, Ψ1_trans, Ψ2, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuL, kernel, D, dims_theta, 0, 0)
+    return UniSGPMeta(method, mean_fn, Xu, Ψ0, Ψ1_trans, Ψ2, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
 end
 
 # # ================== Simple KernelFunctions.jl Kernel Builder (dimension-agnostic) ================== #
@@ -358,13 +359,13 @@ apply_mean_fn(x::AbstractVector{<:AbstractVector}, mf) = mf(x) # vector of vecto
     returns:
         (mean::Number, cov::Matrix)
 """
-mean_cov_scalar_matrix(x::Real) = (x, @SMatrix [0.0]) # Base case: scalar number
-mean_cov_scalar_matrix(x::UnivariateNormalDistributionsFamily) = (mean(x), @SMatrix [var(x)]) # Univariate normal distributions
-mean_cov_scalar_matrix(x::PointMass{<:Real}) = (mean(x), @SMatrix [0.0]) # PointMass of a scalar
+mean_cov_scalar_matrix(x::Real) = (x, [0.0;;]) # Base case: scalar number
+mean_cov_scalar_matrix(x::UnivariateNormalDistributionsFamily) = (mean(x), [var(x);;]) # Univariate normal distributions
+mean_cov_scalar_matrix(x::PointMass{<:Real}) = (mean(x), [0.0;;]) # PointMass of a scalar
 # 1-element vector containing a scalar
 function mean_cov_scalar_matrix(x::AbstractVector{<:Real})
     @assert length(x) == 1 "x must be scalar (e.g. length 1 vector)"
-    (x[1], @SMatrix [0.0])
+    (x[1], [0.0;;])
 end
 # 1-element vector containing a distribution/pointmass
 function mean_cov_scalar_matrix(x::AbstractVector{<:Union{PointMass,UnivariateNormalDistributionsFamily}})
@@ -375,7 +376,7 @@ end
 function mean_cov_scalar_matrix(x::PointMass{<:AbstractVector{<:Real}})
     μ = mean(x)
     @assert length(μ) == 1 "x must be scalar (e.g. length 1 PointMass)"
-    (μ[1], @SMatrix [0.0])
+    (μ[1], [0.0;;])
 end
 
 """

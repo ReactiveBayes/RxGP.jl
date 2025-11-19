@@ -8,8 +8,12 @@
     mf = getMeanFn(meta)
     mx = apply_mean_fn(μ_in, mf)
     mxu = apply_mean_fn.(meta.Xu, mf)
-    kernelmatrix!(meta.Ψ1_trans, kernel(θ), meta.Xu, [μ_in])
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    if q_in isa Distribution
+        approximate_kernel_expectation!(meta.Ψ1_trans, meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]), q_in)
+    else
+        kernelmatrix!(meta.Ψ1_trans, kernel(θ), meta.Xu, [μ_in])
+    end
+    Ku_mxu = meta.KuuF \ mxu
     μ_y = mx + jdotavx(meta.Ψ1_trans, μ_v) - jdotavx(meta.Ψ1_trans, Ku_mxu)
     return NormalMeanPrecision(μ_y, mean(q_w))
 end

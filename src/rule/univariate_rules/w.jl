@@ -4,36 +4,44 @@
     μ_in, Σ_in = mean_cov_vector_matrix(q_in)
     θ = mean(q_θ)
     kernel = getKernel(meta)
-    μ_v, Σ_v = mean_cov(q_v)
+    μ_v, Σ_v = mean_cov_vector_matrix(q_v)
     mf = getMeanFn(meta)
     mx = apply_mean_fn(μ_in, mf)
     mxu = apply_mean_fn.(meta.Xu, mf)
-    Uv = fastcholesky(Σ_v + μ_v * μ_v').U
+    Rv = Σ_v + μ_v * μ_v'
+    # Uv = fastcholesky(Rv).U
 
-    Ψ0 = similar(meta.Ψ0)
-    Ψ1_trans = similar(meta.Ψ1_trans) 
-    kernelmatrix!(Ψ0,kernel(θ), [μ_in], [μ_in])
-    kernelmatrix!(Ψ1_trans,kernel(θ), meta.Xu, [μ_in]) # col vector
+    if q_in isa Distribution
+        meta.Ψ0 = approximate_kernel_expectation(meta.method,(x) -> kernelmatrix(kernel(θ), [x], [x]), q_in)[1]
+        meta.Ψ1_trans = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]), q_in)
+        meta.Ψ2 = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in) + 1e-8*I
+    else
+        meta.Ψ0 = kernelmatrix(kernel(θ), [μ_in], [μ_in])[1]
+        meta.Ψ1_trans = kernelmatrix(kernel(θ), meta.Xu, [μ_in])
+        meta.Ψ2 = kernelmatrix(kernel(θ), meta.Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], meta.Xu) + 1e-8*I
+    end
 
-    α = meta.KuuL \ Ψ1_trans
-    Ψ0 .-= jdotavx(α,α) #I1
+    I1 = meta.Ψ0
+    α = meta.KuuF.L \ meta.Ψ1_trans
+    I1 -= jdotavx(α,α) #I1 = meta.Ψ0 - tr( meta.KuuF \ meta.Ψ2 )
 
-    mul!(meta.Ψ2, Ψ1_trans, Ψ1_trans') # Ψ2 = Ψ1_trans * Ψ1_trans' (matrix)
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    Ku_mxu = meta.KuuF \ mxu
     Ψ2_Ku_mxu = meta.Ψ2 * Ku_mxu
 
-    Rv_Ψ1_trans = Uv * Ψ1_trans
+    # Uv_Ψ1_trans = Uv * meta.Ψ1_trans # tr(Rv * Ψ2)
 
     I4 = (
         μ_y^2 
-        - 2*μ_y*( mx + jdotavx(Ψ1_trans, (μ_v - Ku_mxu)) )
+        + Σ_y[1,1]
+        - 2*μ_y*( mx + jdotavx(meta.Ψ1_trans, (μ_v - Ku_mxu)) )
         + mx^2 
-        + jdotavx(Rv_Ψ1_trans, Rv_Ψ1_trans) # tr(Rv * Ψ2)
+        + tr(Rv * meta.Ψ2) # + jdotavx(Uv_Ψ1_trans, Uv_Ψ1_trans)
         + jdotavx(Ku_mxu, Ψ2_Ku_mxu)
-        + 2*mx*jdotavx(Ψ1_trans, μ_v) 
-        - 2*mx*jdotavx(Ψ1_trans, Ku_mxu) 
+        + 2*mx*jdotavx(meta.Ψ1_trans, μ_v) 
+        - 2*mx*jdotavx(meta.Ψ1_trans, Ku_mxu) 
         - 2*jdotavx(μ_v, Ψ2_Ku_mxu)
-        )
-
-    return GammaShapeRate(1.5, 0.5*(Ψ0[1] + I4))
+    )
+    I4 = clamp(I4, 1e-12, 1e12)
+    
+    return GammaShapeRate(1.5, 0.5*(I1 + I4))
 end

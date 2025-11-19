@@ -1,8 +1,5 @@
-import LoopVectorization: vmapreduce
-import SparseArrays: blockdiag,sparse, spdiagm
-import ExponentialFamily: mean_cov
-
 export GenUT, GenUnscented
+
 """
 The `GenUnscented` structure defines the approximation method of Generalized Unscented Transform. 
 """

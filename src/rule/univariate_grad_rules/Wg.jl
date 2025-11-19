@@ -12,7 +12,7 @@
     Dxθ = getDxθ(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
+    Ku_mxu = meta.KuuF \ mxu
     Ωx = Ex(μ_in)
     Ω0 = Dxθ(μ_in, θ)
     Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
@@ -27,7 +27,7 @@
     Ω12 = Ω1 * Ku_mxu * transpose(μ_v) * transpose(Ω1)
     Ω13 = Ω1 * Ku_mxu * transpose(Ku_mxu) * transpose(Ω1)
 
-    G1 = Ω0 - Ω1 * ((meta.KuuL * transpose(meta.KuuL)) \ transpose(Ω1))
+    G1 = Ω0 - Ω1 * (meta.KuuF \ transpose(Ω1))
     A_G2 = typeof(q_out) <: MultivariateNormalDistributionsFamily ? μ_ω * transpose(μ_ω) + Σ_ω : μ_ω * transpose(μ_ω)
     B_G2 = μ_ω * ( transpose(Ωx) + ( transpose(μ_v) - transpose(Ku_mxu) ) * transpose(Ω1) )
     C_G2 = (Ωx + Ω1 * ( μ_v - Ku_mxu )) * transpose(μ_ω)

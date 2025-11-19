@@ -11,11 +11,11 @@
     Uv = fastcholesky(Σ_v + μ_v * μ_v').U
 
     B_trans = (x) -> kernelmatrix(kernel(θ), meta.Xu,[x])
-    α = (x) -> meta.KuuL \ B_trans(x)
+    α = (x) -> meta.KuuF.L \ B_trans(x)
     A = (x) -> kernelmatrix(kernel(θ),[x]) .- dot(α(x),α(x))
     β = (x) -> Uv * B_trans(x)
-    Ku_mxu = (meta.KuuL * transpose(meta.KuuL)) \ mxu
-    mxuT_KuuLinvT_BT = (x) -> dot(Ku_mxu, B_trans(x))
+    Ku_mxu = meta.KuuF \ mxu
+    mxuT_KuuInvT_BT = (x) -> dot(Ku_mxu, B_trans(x))
     B_KuuInv_mxu = (x) -> dot(B_trans(x), Ku_mxu)
 
     partA = (x) -> -0.5 * w_bar * A(x)[1]
@@ -27,7 +27,7 @@
     partC = (x) -> -0.5 * w_bar * ( 
         mx(x)^2 
         + dot(β(x), β(x)) 
-        + mxuT_KuuLinvT_BT(x)*B_KuuInv_mxu(x) 
+        + mxuT_KuuInvT_BT(x)*B_KuuInv_mxu(x) 
         + 2*mx(x)*dot(B_trans(x),μ_v) 
         - 2*mx(x)*B_KuuInv_mxu(x) 
         - 2*dot(B_trans(x),μ_v)*B_KuuInv_mxu(x)
