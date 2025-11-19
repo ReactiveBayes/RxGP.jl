@@ -7,15 +7,21 @@
     Wg_bar = mean(q_Wg)
     mf = getMeanFn(meta)
     mxu = apply_mean_fn.(meta.Xu, mf)
+    Ku_mxu = meta.KuuF \ mxu
     Ex = getEx(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
-    Ωx = Ex(μ_in)
-    Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
-
-    Ku_mxu = meta.KuuF \ mxu
-    Ω3 = transpose(Ω1) * Wg_bar * Ω1
-    Ω4 = transpose(Ωx) * Wg_bar * Ω1
+    if q_in isa Distribution
+        Ωx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_in) + 1e-8*I
+        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
+        Ω3 = approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
+        Ω4 = approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
+    else
+        Ωx = Ex(μ_in)
+        Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
+        Ω3 = transpose(Ω1) * Wg_bar * Ω1
+        Ω4 = transpose(Ωx) * Wg_bar * Ω1
+    end
 
     W_v = Ω3
     ξ_v = vec(Ω3 * Ku_mxu + transpose(Ω1) * Wg_bar * μ_ω - transpose(Ω4))
