@@ -11,8 +11,8 @@
     Cxθ_Xu = getCxθ_Xu(meta)
 
     if q_in isa Distribution
-        Ωx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_in) + 1e-8*I
-        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
+        Ωx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_in)
+        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in)
     else
         Ωx = Ex(μ_in)
         Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)

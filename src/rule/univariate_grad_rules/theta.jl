@@ -7,17 +7,18 @@
     mf = getMeanFn(meta)
     mxu = apply_mean_fn.(meta.Xu, mf)
     Ku_mxu = meta.KuuF \ mxu
+    mxuT_KuT = transpose(Ku_mxu)
     Rv = μ_v * transpose(μ_v) + Σ_v
     Ex = getEx(meta)
     Dxθ = getDxθ(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
     if q_in isa Distribution
-        Ω0 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ), q_in) + 1e-8*I
-        Ω1 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
-        Ω2 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
-        Ω3 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
-        Ω4 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in) + 1e-8*I
+        Ω0 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ), q_in)
+        Ω1 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in)
+        Ω2 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Cxθ_Xu(x, θ, meta.Xu), q_in)
+        Ω3 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in)
+        Ω4 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in)
     else
         Ω0 = (θ) -> Dxθ(μ_in, θ)
         Ω1 = (θ) -> Cxθ_Xu(μ_in, θ, meta.Xu)
@@ -34,5 +35,4 @@
     log_backwardmess = (θ) -> -0.5 * tr( Wg_bar * G1(θ) ) - 0.5 * (part_A(θ) - part_B(θ))
 
     return get_dims_theta(meta) < 2 ? ContinuousUnivariateLogPdf(log_backwardmess) : ContinuousMultivariateLogPdf(UnspecifiedDomain(), log_backwardmess)
-    # return project_MvN_fn(log_backwardmess, get_dims_theta(meta))
 end
