@@ -30,26 +30,6 @@
         end
         return (; method=grad_default_method, D, Xu, Nu=length(Xu), kernel, θ_val, meta, q_in, q_out, q_v, q_Wg, q_θ=PointMass(θ_val))
     end
-
-    function wishart_has_scalar(dist, target)
-        for fname in fieldnames(typeof(dist))
-            val = getfield(dist, fname)
-            if val isa Number && isapprox(float(val), float(target); atol=1e-6)
-                return true
-            end
-        end
-        return false
-    end
-
-    function wishart_has_matrix(dist, target)
-        for fname in fieldnames(typeof(dist))
-            val = getfield(dist, fname)
-            if val isa AbstractMatrix && size(val) == size(target) && isapprox(val, target; atol=1e-6)
-                return true
-            end
-        end
-        return false
-    end
 end
 
 @testitem "node_rule/univariate_grad/Test GPMeta" setup=[univariate_grad_snippet] begin
@@ -251,9 +231,10 @@ end
 
     msg = @call_rule UniSGP_Grad(:Wg, Marginalisation) (q_out = ctx.q_out, q_in = ctx.q_in, q_v = ctx.q_v, q_θ = ctx.q_θ, meta = meta)
     n_gt = ctx.D + 2
-    inv_V_gt = G1 + G2
-    @test wishart_has_scalar(msg, n_gt)
-    @test wishart_has_matrix(msg, inv_V_gt)
+    V_gt = cholinv(G1 + G2)
+    n_w, V_w = params(msg)
+    @test isapprox(n_w, n_gt; atol=1e-6)
+    @test isapprox(V_w, V_gt; atol=1e-6)
 
     det_ctx = grad_fixture(q_in = PointMass(0.13), q_out = MvNormalMeanCovariance([0.6], [0.0;;]))
     meta_det = det_ctx.meta
@@ -280,11 +261,12 @@ end
     B_G2_det = μ_ω_det * (transpose(Ωx_det) + (transpose(μ_v_det) - transpose(Ku_mxu_det)) * transpose(Ω1_det))
     C_G2_det = (Ωx_det + Ω1_det * (μ_v_det - Ku_mxu_det)) * transpose(μ_ω_det)
     D_G2_det = Ω5_det + Ω6_det - Ω7_det + Ω8_det + Ω9_det - Ω10_det - Ω11_det - Ω12_det + Ω13_det
-    inv_V_det = G1_det + (A_G2_det - B_G2_det - C_G2_det + D_G2_det)
+    V_det = cholinv(G1_det + (A_G2_det - B_G2_det - C_G2_det + D_G2_det))
 
     msg_det = @call_rule UniSGP_Grad(:Wg, Marginalisation) (q_out = det_ctx.q_out, q_in = det_ctx.q_in, q_v = det_ctx.q_v, q_θ = det_ctx.q_θ, meta = meta_det)
-    @test wishart_has_scalar(msg_det, det_ctx.D + 2)
-    @test wishart_has_matrix(msg_det, inv_V_det)
+    n_w_det, V_w_det = params(msg_det)
+    @test isapprox(n_w_det, ctx.D + 2; atol=1e-6)
+    @test isapprox(V_w_det, V_det; atol=1e-6)
 end
 
 @testitem "node_rule/univariate_grad/Test θ rule" setup=[univariate_grad_snippet] begin
