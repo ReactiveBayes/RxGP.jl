@@ -337,15 +337,14 @@ end
 # ==== ======= Mean Function Application Helper (handles scalars, vectors, vectors of vectors) ======= #
 """
     apply_mean_fn(x, mf)
-Apply a mean function `mf` to input `x`, handling different input types:
-- If `x` is a scalar, apply `mf` directly.
+Apply a SCALAR mean function `mf` to input `x`, handling different input types:
+- If `x` is a scalar, apply `mf` directly. E.g. for mf(x) = x^2, apply_mean_fn(3, mf) returns 9.
 - If `x` is a length-1 vector of numbers, apply `mf` to the single element.
 - If `x` is a longer vector of numbers, apply `mf` to the entire vector.
-- If `x` is a vector of vectors, apply `mf` to the entire vector.
+- If `x` is a vector of vectors, use apply_mean_fn.(x, mf) to apply `mf` to each sub-vector.
 """
 apply_mean_fn(x::Number, mf) = mf(x) # scalar
 apply_mean_fn(x::AbstractVector{<:Number}, mf) = begin length(x) == 1 ? mf(x[1]) : mf(x) end # length-1 vector of numbers
-apply_mean_fn(x::AbstractVector{<:AbstractVector}, mf) = mf(x) # vector of vectors
 
 # ==================== Expanded mean_cov functionality to enforce return types ======================== #
 """
