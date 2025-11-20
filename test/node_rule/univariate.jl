@@ -17,7 +17,7 @@
     @test getKernel(Unimeta) == kernel
     @test typeof(getKernel(Unimeta)) <: Function
     @test getmethod(Unimeta) == method
-    @test getΨ0(Unimeta) == Ψ0 
+    @test getΨ0(Unimeta) == getindex(Ψ0,1) 
     @test getΨ1_trans(Unimeta) == Ψ1_trans
     @test getΨ2(Unimeta) == Ψ2
     @test getKuuF(Unimeta) == KuuF
