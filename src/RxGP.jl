@@ -1,23 +1,13 @@
 module RxGP
 
-using RxInfer, LoopVectorization
+using RxInfer, LoopVectorization, ReactiveMP
 using Zygote, Optim, ForwardDiff, StatsFuns, KernelFunctions, LinearAlgebra
 using AbstractGPs, Flux, Random, SparseArrays, SpecialFunctions, StableRNGs
 
-# ReactiveMP, GraphPPL, Rocket, Distributions, ExponentialFamily, BayesBase, FastCholesky
+import ReactiveMP: getweights, getpoints, approximate_meancov, WishartFast, approximate_kernel_expectation
 
-# using ReactiveMP
-import ReactiveMP: getweights, getpoints, approximate_meancov, approximate_kernel_expectation, WishartFast
-
-
-# using ForwardDiff, KernelFunctions
-# using LinearAlgebra
-
-# import LoopVectorization: vmapreduce
-# import SparseArrays: blockdiag,sparse, spdiagm
-# import ExponentialFamily: mean_cov
-
-# import ReactiveMP: WishartFast
+# other
+include("types.jl")
 
 # helper functions
 include("helper_functions/genUT.jl")
