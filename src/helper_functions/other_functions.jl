@@ -1,12 +1,15 @@
 export jdotavx, create_blockmatrix
 export get_Ex, get_Cxθ_Xu, get_Dxθ, get_Fxθ, get_GP_meta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
 
-function jdotavx(a::T, b::F) where {T<:AbstractArray, F <: AbstractArray}
-    s = zero(eltype(a))
-    @turbo for i ∈ eachindex(a, b)
-        s += a[i] * b[i]
+function jdotavx(a::AbstractArray, b::AbstractArray)
+    a_flat, b_flat = collect(vec(a)), collect(vec(b))
+    @assert axes(a_flat) == axes(b_flat)
+    @assert length(a_flat) == length(b_flat) "dot operands must have same number of elements"
+    s = zero(promote_type(eltype(a), eltype(b)))
+    @turbo for i in eachindex(a_flat, b_flat)
+        s += a_flat[i] * b_flat[i]
     end
-    s
+    return s
 end
 
 function create_blockmatrix(A,d,M)
@@ -201,9 +204,12 @@ function get_GP_meta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, inde
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
     KuuF = fastcholesky(Kuu)
     x_dummy = zeros(D)
+    Ψx = 0.0
+    Ψxx = 0.0
     Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
     Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
     Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu);
+    Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
     Uv = zeros(size(Xu,1), size(Xu,1))
 
     @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
@@ -214,7 +220,7 @@ function get_GP_meta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, inde
 
     dims_theta = length(θ)
 
-    return UniSGPMeta(method, mean_fn, Xu, Ψ0, Ψ1_trans, Ψ2, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
+    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
 end
 
 # # ================== Simple KernelFunctions.jl Kernel Builder (dimension-agnostic) ================== #

@@ -1,5 +1,5 @@
 export UniSGPMeta, MultiSGPMeta
-export getmethod, getMeanFn, getInducingInput, getΨ0, getΨ1_trans, getΨ2, getEx, getFxθ, getDxθ, getCxθ_Xu, getKuuF, getKernel, get_dims_data, get_dims_theta, getcounter, getN
+export getmethod, getMeanFn, getInducingInput, getΨx, getΨxx, getΨ0, getΨ1_trans, getΨ2, getΨ3, getEx, getFxθ, getDxθ, getCxθ_Xu, getKuuF, getKernel, get_dims_data, get_dims_theta, getcounter, getN
 export getKuuInverse, getGPCache
 
 #---- Define metas -----# 
@@ -8,9 +8,12 @@ mutable struct UniSGPMeta{I,E,F,D,C,CF,K}
     method          :: Union{Nothing,AbstractApproximationMethod}
     mean_fn         :: Function
     Xu              :: I
+    Ψx              :: Float64
+    Ψxx             :: Float64
     Ψ0              :: Float64
     Ψ1_trans        :: Matrix{Float64}
     Ψ2              :: Matrix{Float64}
+    Ψ3              :: Matrix{Float64}
     Ex              :: E
     Fxθ             :: F
     Dxθ             :: D
@@ -26,9 +29,12 @@ end
 getmethod(meta::UniSGPMeta) = meta.method
 getMeanFn(meta::UniSGPMeta) = meta.mean_fn
 getInducingInput(meta::UniSGPMeta) = meta.Xu
+getΨx(meta::UniSGPMeta) = meta.Ψx
+getΨxx(meta::UniSGPMeta) = meta.Ψxx
 getΨ0(meta::UniSGPMeta) = meta.Ψ0
 getΨ1_trans(meta::UniSGPMeta) = meta.Ψ1_trans
 getΨ2(meta::UniSGPMeta) = meta.Ψ2
+getΨ3(meta::UniSGPMeta) = meta.Ψ3
 getEx(meta::UniSGPMeta) = meta.Ex
 getFxθ(meta::UniSGPMeta) = meta.Fxθ
 getDxθ(meta::UniSGPMeta) = meta.Dxθ
