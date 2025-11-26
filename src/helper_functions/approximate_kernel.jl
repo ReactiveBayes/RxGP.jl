@@ -1,23 +1,5 @@
 export approximate_kernel_expectation!, approximate_kernel_expectation
 
-# univariate case 
-function ReactiveMP.prod(::GenericProd, left::UnivariateGaussianDistributionsFamily, right::ContinuousUnivariateLogPdf) 
-    m,v = approximate_meancov(ghcubature(21),(x) -> exp(right.logpdf(x)),left)
-    if isnan(m) || isnan(v)
-        return left 
-    else
-        return NormalMeanVariance(m,v + 1e-6)
-    end
-end
-function ReactiveMP.prod(::GenericProd, left::ContinuousUnivariateLogPdf, right::UnivariateGaussianDistributionsFamily) 
-    m,v = approximate_meancov(ghcubature(21),(x) -> exp(left.logpdf(x)),right)
-    if isnan(m) || isnan(v)
-        return right
-    else
-        return NormalMeanVariance(m,v)
-    end
-end
-
 #univariate case
 function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, m::Real, P::Real)
     weights = getweights(method, m, P)
@@ -34,7 +16,7 @@ function approximate_kernel_expectation(method::AbstractApproximationMethod, g::
 end
 
 function approximate_kernel_expectation(method::GenUnscented, g::Function, q::D) where {D <: UnivariateDistribution}
-    return approximate_expectation(method ,q, g)
+    return approximate_expectation(method, q, g)
 end
 
 function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::Real, P::Real) where {K <: Array}
@@ -51,10 +33,8 @@ function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationM
     return approximate_kernel_expectation!(gbar, method, g, mean(distribution), var(distribution))
 end
 
+
 #multivariate case 
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: MultivariateDistribution}
-    return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
-end
 
 function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {K <: Array, T <: Real}
     weights = getweights(method, m, P)
@@ -65,6 +45,10 @@ function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationM
         axpy!(weight, g(point), gbar) # gbar = gbar + weight * g(point)
     end
     return gbar
+end
+
+function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: MultivariateDistribution}
+    return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
 end
 
 function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {T <: Real}
@@ -78,30 +62,6 @@ function approximate_kernel_expectation(method::AbstractApproximationMethod, g::
     return gbar
 end
 
-
-# multivariate 
-
-function ReactiveMP.prod(::GenericProd, left::MultivariateGaussianDistributionsFamily, right::ContinuousMultivariateLogPdf) 
-    m,v = approximate_meancov(srcubature(),(x) -> exp(right.logpdf(x)),left)
-    if isnan(m[1])
-        return left 
-    else
-        return MvNormalMeanCovariance(m,v)
-    end
-end
-
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: MultivariateDistribution}
-    return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
-end
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {K <: Array, T <: Real}
-    weights = getweights(method, m, P)
-    points  = getpoints(method, m, P)
-
-    gbar .= 0
-    foreach(zip(weights, points)) do (weight, point)
-        axpy!(weight, g(point), gbar) # gbar = gbar + weight * g(point)
-    end
-    return gbar
+function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: MultivariateDistribution}
+    return approximate_kernel_expectation(method, g, mean(distribution), cov(distribution))
 end
