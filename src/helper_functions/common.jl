@@ -1,9 +1,4 @@
-export IN_OUT, NOISE_Wg, NOISE_w, BufferUniSGP
-
-# Convenience type to capture acceptable types for inputs and outputs
-IN_OUT = Union{Real, Array{<:Number}, PointMass, UnivariateNormalDistributionsFamily, MultivariateNormalDistributionsFamily}
-NOISE_Wg = Union{Wishart, PointMass}
-NOISE_w = Union{GammaShapeRate, PointMass}
+export BufferUniSGP
 
 mutable struct BufferUniSGP{D,M} 
     qv      :: D 
