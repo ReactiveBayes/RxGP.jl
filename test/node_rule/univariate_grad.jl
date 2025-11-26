@@ -21,8 +21,9 @@
 
     function grad_fixture(; q_in=Normal(0.35, 0.4), q_out=MvNormalMeanCovariance([0.8], [0.25;;]), q_Wg=PointMass([1.4;;]), q_v=nothing, Xu=collect(range(-0.8, 0.8, length=5)))
         D = 1
-        kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=:SE)
-        meta = get_GP_meta(D; method=grad_default_method, mean_fn=grad_mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=true, Xu=Xu, θ=θ_val)
+        kernel_spec = :SEn
+        kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=kernel_spec)
+        meta = get_GP_meta(D; method=grad_default_method, mean_fn=grad_mean_fn, kernel=kernel, kernel_spec=kernel_spec, mode=:AN, independent_SE_lengthscales=true, Xu=Xu, θ=θ_val)
         if q_v === nothing
             μ_v = collect(range(-0.5, 0.5, length=length(Xu)))
             Σ_v = 0.45 .* Matrix{Float64}(I, length(Xu), length(Xu))

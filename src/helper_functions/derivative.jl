@@ -6,35 +6,51 @@ export neg_log_backwardmess_multi, grad_llh_multi, grad_llh_multi!
 ## The following functions are copied from the backward message toward "θ" edge
 # 1) univariate case
 #for regression/classification with known input with arbitrary mean function
-function neg_log_backwardmess_fast(θ; ω_data::Union{Nothing,AbstractVector{<:AbstractVector}}=nothing, y_data::Union{Nothing,AbstractVector}=nothing, x_data::AbstractVector{<:AbstractVector}, qv, qw=nothing, qWg=nothing, kernel, Ex, Dxθ, Cxθ_Xu, mean_fn, Xu)
+function neg_log_backwardmess_fast(θ; ω_data::Union{Nothing,AbstractVector{<:AbstractVector}}=nothing, y_data::Union{Nothing,AbstractVector}=nothing, x_data::AbstractVector{<:Union{Distribution, PointMass, AbstractVector}}, q_v, q_w=nothing, q_Wg=nothing, method=nothing, kernel, Ex, Dxθ, Cxθ_Xu, mean_fn, Xu)
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
+    KuuF = fastcholesky(Kuu)
     mf = mean_fn
     mxu = apply_mean_fn.(Xu, mf)
-    Ku_mxu = Kuu \ mxu
+    Ku_mxu = KuuF \ mxu
     mxuT_KuT = transpose(Ku_mxu)
-    μ_v, Σ_v = mean_cov(qv)
+    μ_v, Σ_v = mean_cov(q_v)
     Rv = Σ_v + μ_v * μ_v'
     llh = 0.0
 
     ## ========== y data ============ ##
     if !isnothing(y_data)
-        Kuu_inv = cholinv(Kuu)
-        kxx = kernelmatrix_diag(kernel(θ), x_data)
-        Kxu = kernelmatrix(kernel(θ), x_data, Xu)
-        w_bar = mean(qw)
-        mx_ = apply_mean_fn.(x_data, mf)
+        w_bar = mean(q_w)
         μ_y_ = typeof(y_data[1]) == Union{MultivariateNormalDistributionsFamily, PointMass} ? mean.(y_data) : y_data
+        
+        if x_data[1] isa Distribution
+            Ψ0_ = approximate_kernel_expectation.(Ref(method), (x) -> kernelmatrix(kernel(θ), [x], [x]), x_data) |> x -> getindex.(x,1)
+            Ψ1_ = approximate_kernel_expectation.(Ref(method), (x) -> kernelmatrix(kernel(θ), [x], Xu), x_data)
+            Ψ2_ = approximate_kernel_expectation.(Ref(method), (x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), x_data)
+            Ψ3_ = approximate_kernel_expectation.(Ref(method), (x) -> apply_mean_fn(x, mf) * kernelmatrix(kernel(θ), [x], Xu), x_data)
+        else
+            μ_x_ = x_data[1] isa PointMass ? mean.(x_data) : x_data
+            Ψ0_ = kernelmatrix_diag(kernel(θ), μ_x_)
+            Ψ1_ = [kernelmatrix(kernel(θ), [x], Xu) for x in μ_x_]
+            Ψ2_ = [transpose(Ψ1_[i]) * Ψ1_[i] for i in eachindex(μ_x_)]
+            Ψ3_ = [apply_mean_fn(x, mf) * kernelmatrix(kernel(θ), [x], Xu) for x in μ_x_]
+        end
+
         for i in eachindex(y_data)
-            mx = mx_[i]
             μ_y = μ_y_[i]
+            Ψ0 = Ψ0_[i] # Ψ0 = E_x[kxx]
+            Ψ1 = Ψ1_[i] # Ψ1 = E_x[Bx]
+            Ψ2 = Ψ2_[i] # Ψ2 = E_x[transpose(Bx)*Bx]
+            Ψ3 = Ψ3_[i] # Ψ3 = E_x[mx*Bx]
+            Ψ2_Ku_mxu = Ψ2 * Ku_mxu
 
-            Ψ0 = kxx[i]
-            Ψ1 = Kxu[i:i, :] # Ψ1 = E_x[Bx] ≈ Kxu[i:i, :]
-            Ψ2 = transpose(Kxu[i:i, :]) * Kxu[i:i, :]
-
-            I1 = Ψ0 - tr( Kuu_inv * Ψ2 ) # I1 = E_x[Ax] ≈ kxx[i] - Kxu[i:i, :] * Kuu_inv * transpose(Kxu[i:i, :])
-            part_A = tr(Rv * Ψ2) + dot(mxuT_KuT, Ψ2*Ku_mxu) + 2*mx*dot(Ψ1, μ_v) - 2*mx*dot(Ψ1, Ku_mxu) - 2*dot(transpose(μ_v), Ψ2*Ku_mxu)
-            I5 = -2*μ_y*dot(Ψ1, (μ_v - Ku_mxu)) + part_A
+            I1 = Ψ0 - tr( KuuF \ Ψ2 )
+            I5 = (
+                - 2 * μ_y * jdotavx(Ψ1, ( μ_v - Ku_mxu ))
+                + tr( Rv * Ψ2 ) 
+                + jdotavx(mxuT_KuT, Ψ2_Ku_mxu)
+                + 2 * jdotavx(Ψ3, (μ_v - Ku_mxu))  
+                - 2 * jdotavx(transpose(μ_v), Ψ2_Ku_mxu)
+            )
 
             llh += - 0.5 * w_bar * ( I1 + I5 )
         end
@@ -43,25 +59,33 @@ function neg_log_backwardmess_fast(θ; ω_data::Union{Nothing,AbstractVector{<:A
     ## ========== ω data ============ ##
     if !isnothing(ω_data)
         μ_ω_ = typeof(ω_data[1]) == Union{MultivariateNormalDistributionsFamily, PointMass} ? mean.(ω_data) : ω_data
-        μ_x_ = typeof(x_data[1]) == Union{MultivariateNormalDistributionsFamily, PointMass} ? mean.(x_data) : x_data
-
-        Wg_bar = mean(qWg)
-        # Ex = (x) -> Ex(x)
+        Wg_bar = mean(q_Wg)
         Dx = (x) -> Dxθ(x, θ)
         Cx = (x) -> Cxθ_Xu(x, θ, Xu)
-        Ωx_ = Ex.(μ_x_)
-        Ω0_ = Dx.(μ_x_)
-        Ω1_ = Cx.(μ_x_)
+        if x_data[1] isa Distribution
+            Ω0_ = approximate_kernel_expectation.(Ref(method), (x) -> Dx(x), x_data)
+            Ω1_ = approximate_kernel_expectation.(Ref(method), (x) -> Cx(x), x_data)
+            Ω3_ = approximate_kernel_expectation.(Ref(method), (x) -> transpose(Cx(x)) * Wg_bar * Cx(x), x_data)
+            Ω4_ = approximate_kernel_expectation.(Ref(method), (x) -> transpose(Ex(x)) * Wg_bar * Cx(x), x_data)
+        else
+            μ_x_ = x_data[1] isa PointMass ? mean.(x_data) : x_data
+            Ωx_ = Ex.(μ_x_)
+            Ω0_ = Dx.(μ_x_)
+            Ω1_ = Cx.(μ_x_)
+            Ω3_ = map(Ω1_i -> transpose(Ω1_i) * Wg_bar * Ω1_i, Ω1_)
+            Ω4_ = map(((Ωx_i, Ω1_i),) -> transpose(Ωx_i) * Wg_bar * Ω1_i, zip(Ωx_, Ω1_))
+        end
+
         for i in eachindex(ω_data)
-            Ωx = Ωx_[i]
             Ω0 = Ω0_[i]
             Ω1 = Ω1_[i]
-            Ω3 = transpose(Ω1) * Wg_bar * Ω1
-            Ω4 = transpose(Ωx) * Wg_bar * Ω1
+            Ω3 = Ω3_[i]
+            Ω4 = Ω4_[i]
+            μ_ω = μ_ω_[i]
 
-            G1 = Ω0 - Ω1 * Kuu_inv * transpose(Ω1)
+            G1 = Ω0 - Ω1 * (KuuF \ transpose(Ω1))
             part_A = 2 * dot(Ω4, (μ_v - Ku_mxu)) + dot((mxuT_KuT - 2*transpose(μ_v)), Ω3*Ku_mxu) + tr(Ω3 * Rv)
-            part_B = 2 * dot(transpose(μ_ω_[i]), Wg_bar * Ω1 * (μ_v - Ku_mxu))
+            part_B = 2 * dot(transpose(μ_ω), Wg_bar * Ω1 * (μ_v - Ku_mxu))
 
             llh += - 0.5 * tr( Wg_bar * G1 ) - 0.5 * ( part_A - part_B )
         end
@@ -84,8 +108,8 @@ function neg_log_backwardmess_uncertain(θ; y_data, qx,v, Uv,w,kernel,Xu,method)
 end
 
 ## Define the corresponding derivative (gradient) functions 
-function grad_llh_default!(grad, θ; ω_data=nothing, y_data=nothing, x_data, qv, qw=nothing, qWg=nothing, kernel, Ex=nothing, Dxθ=nothing, Cxθ_Xu=nothing, mean_fn=nothing, Xu)
-    return ForwardDiff.gradient!(grad, (x) -> neg_log_backwardmess_fast(x; ω_data=ω_data, y_data=y_data, x_data=x_data, qv=qv, qw=qw, qWg=qWg, kernel=kernel, Ex=Ex, Dxθ=Dxθ, Cxθ_Xu=Cxθ_Xu, mean_fn=mean_fn, Xu=Xu), θ)
+function grad_llh_default!(grad, θ; ω_data=nothing, y_data=nothing, x_data, q_v, q_w=nothing, q_Wg=nothing, method=nothing, kernel, Ex=nothing, Dxθ=nothing, Cxθ_Xu=nothing, mean_fn=nothing, Xu)
+    return ForwardDiff.gradient!(grad, (x) -> neg_log_backwardmess_fast(x; ω_data=ω_data, y_data=y_data, x_data=x_data, q_v=q_v, q_w=q_w, q_Wg=q_Wg, method=method, kernel=kernel, Ex=Ex, Dxθ=Dxθ, Cxθ_Xu=Cxθ_Xu, mean_fn=mean_fn, Xu=Xu), θ)
 end
 
 #this is for big data
