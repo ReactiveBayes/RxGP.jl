@@ -13,16 +13,7 @@ const GenUT = GenUnscented
 const GenUnscentedTransform = GenUnscented
 
 # add univariate case
-function approximate_expectation(method::GenUnscented, q::D, f::F) where {F, D <: UnivariateDistribution}
-    m = mean(q)
-    V = var(q)
-    S = skewness(q)
-    K = kurtosis(q, false)
-    (sigma_points, weights) = sigma_points_weights(method, m, V, S, K)
-    return sum(weights .* f.(sigma_points))
-end
-
-function approximate_expectation(method::GenUnscented, q, f::F) where {F}
+function approximate_expectation(method::GenUnscented, q::D, f::F) where {F, D <: Distribution}
     m = mean(q)
     V = cov(q)
     S = skewness(q)
