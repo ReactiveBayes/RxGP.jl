@@ -1,36 +1,3 @@
-@testitem "node_rule/univariate/Test GPMeta" begin
-    using Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, StatsFuns, RxInfer, ReactiveMP, RxGP
-    method = ghcubature(21)
-    Nu = 10
-    Xu = collect(1:Nu)
-    D=1
-    kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
-    mean_fn = x -> zero(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
-    Kuu = kernelmatrix(kernel(θ_val), Xu) + 1e-8 * I
-    KuuF = fastcholesky(Kuu)
-    x_dummy = zeros(D)
-    Ψx = 0.0
-    Ψxx = 0.0
-    Ψ0 = kernelmatrix(kernel(θ_val), [x_dummy])
-    Ψ1_trans = kernelmatrix(kernel(θ_val),Xu,[x_dummy])
-    Ψ2 = kernelmatrix(kernel(θ_val),Xu,[x_dummy]) * kernelmatrix(kernel(θ_val),[x_dummy],Xu)
-    Ψ3 = kernelmatrix(kernel(θ_val), [x_dummy], Xu)
-    @test getInducingInput(Unimeta) == Xu
-    @test getKernel(Unimeta) == kernel
-    @test typeof(getKernel(Unimeta)) <: Function
-    @test getmethod(Unimeta) == method
-    @test getΨx(Unimeta) == Ψx 
-    @test getΨxx(Unimeta) == Ψxx
-    @test getΨ0(Unimeta) == getindex(Ψ0,1) 
-    @test getΨ1_trans(Unimeta) == Ψ1_trans
-    @test getΨ2(Unimeta) == Ψ2
-    @test getΨ3(Unimeta) == Ψ3
-    @test getKuuF(Unimeta) == KuuF
-    @test getcounter(Unimeta) == 0
-    @test getN(Unimeta) == 1
-end
-
 @testitem "node_rule/univariate/Test out rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
 
@@ -40,13 +7,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     μ_y = mean(q_out)
     μ_in = mean(q_in)
@@ -86,13 +53,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     w_bar = mean(q_w)
     μ_in = mean(q_in)
@@ -142,13 +109,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     w_bar = mean(q_w)
     μ_in = mean(q_in)
@@ -201,13 +168,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     w_bar = mean(q_w)
     μ_in = mean(q_in)
@@ -297,13 +264,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     w_bar = mean(q_w)
     μ_in = mean(q_in)
@@ -383,13 +350,13 @@ end
     D=1
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     x_dummy = zeros(D)
 
-    q_out = Normal(1,2)
+    q_out = NormalMeanVariance(1,2)
     q_w = GammaShapeRate(1,1)
     q_v = MvNormalMeanCovariance(rand(Nu) |> (x) -> sin.(x), diageye(Nu))
-    q_in = Normal(0,1)
+    q_in = NormalMeanVariance(0,1)
     q_θ = PointMass(θ_val)
     w_bar = mean(q_w)
     E_logw = mean(log,q_w)

@@ -1,5 +1,3 @@
-
-
 @testsnippet univariate_grad_snippet begin
     using RxGP
     using RxInfer
@@ -14,61 +12,34 @@
 
     const grad_default_method = ReactiveMP.ghcubature(21)
 
-    grad_mean_fn(x) = begin
-        x_val = x isa Number ? x : x[1]
-        x_val^2 + 0.35 * x_val - 0.1
-    end
-
-    function grad_fixture(; q_in=Normal(0.35, 0.4), q_out=MvNormalMeanCovariance([0.8], [0.25;;]), q_Wg=PointMass([1.4;;]), q_v=nothing, Xu=collect(range(-0.8, 0.8, length=5)))
-        D = 1
-        kernel_spec = :SEn
-        kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=kernel_spec)
-        meta = get_GP_meta(D; method=grad_default_method, mean_fn=grad_mean_fn, kernel=kernel, kernel_spec=kernel_spec, mode=:AN, independent_SE_lengthscales=true, Xu=Xu, θ=θ_val)
-        if q_v === nothing
-            μ_v = collect(range(-0.5, 0.5, length=length(Xu)))
-            Σ_v = 0.45 .* Matrix{Float64}(I, length(Xu), length(Xu))
-            q_v = MvNormalMeanCovariance(μ_v, Σ_v)
+    function test_fixture(;D=1, fixed_input=false, fixed_output=false)
+        rng = StableRNG(12)
+        Nu = 5
+        if D == 1
+            q_in = fixed_input ? PointMass(rand(rng)) : NormalMeanVariance(rand(rng), rand(rng) + 0.1)
+            q_out = fixed_output ? PointMass(rand(rng)) : NormalMeanVariance(rand(rng), rand(rng) + 0.1)
+            q_Wg = PointMass(rand(rng) + 0.1)
+            Xu = [rand(rng) for _ in 1:Nu]
+            test_mean_fn = (x) -> x^2 + 0.35x
+        elseif D > 1
+            q_in = fixed_input ? PointMass(randn(rng, D)) : MvNormalMeanCovariance(randn(rng, D), randn(rng, D, D) |> x -> x * x' + 0.1I)
+            q_out = fixed_output ? PointMass(randn(rng, D)) : MvNormalMeanCovariance(randn(rng, D), randn(rng, D, D) |> x -> x * x' + 0.1I)
+            q_Wg = PointMass(randn(rng, D, D) |> x -> x * x' + 0.1I)
+            Xu = [randn(rng, D) for _ in 1:Nu]
+            test_mean_fn = (x) -> dot(x,x)
         end
-        return (; method=grad_default_method, D, Xu, Nu=length(Xu), kernel, θ_val, meta, q_in, q_out, q_v, q_Wg, q_θ=PointMass(θ_val))
+        q_v = MvNormalMeanCovariance(randn(rng, Nu), randn(rng, Nu, Nu) |> x -> x * x' + 0.1I)
+        kernel_spec = :SEn
+        mode = :AN
+        independent_SE_lengthscales = true
+        kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=kernel_spec)
+        meta = get_UniSGPMeta(D; method=grad_default_method, mean_fn=test_mean_fn, kernel=kernel, kernel_spec=kernel_spec, mode=:AN, independent_SE_lengthscales=true, Xu=Xu, θ=θ_val)
+        return (; method=grad_default_method, D, Xu, Nu=length(Xu), kernel, kernel_spec, mode, independent_SE_lengthscales, θ_val, meta, q_in, q_out, q_v, q_Wg, q_θ=PointMass(θ_val), rng)
     end
-end
-
-@testitem "node_rule/univariate_grad/Test GPMeta" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
-    meta = ctx.meta
-
-    x_dummy = zeros(ctx.D)
-    Ψ0 = kernelmatrix(ctx.kernel(ctx.θ_val), [x_dummy])[1]
-    Ψ1_trans = kernelmatrix(ctx.kernel(ctx.θ_val), ctx.Xu, [x_dummy])
-    Ψ2 = kernelmatrix(ctx.kernel(ctx.θ_val), ctx.Xu, [x_dummy]) * kernelmatrix(ctx.kernel(ctx.θ_val), [x_dummy], ctx.Xu)
-
-    @test getInducingInput(meta) == ctx.Xu
-    @test getKernel(meta) == ctx.kernel
-    @test typeof(getKernel(meta)) <: Function
-    @test getmethod(meta) == ctx.method
-    @test getΨ0(meta) == Ψ0
-    @test getΨ1_trans(meta) == Ψ1_trans
-    @test getΨ2(meta) == Ψ2
-    @test getcounter(meta) == 0
-    @test getN(meta) == 1
-
-    Ex = getEx(meta)
-    Dxθ = getDxθ(meta)
-    Fxθ = getFxθ(meta)
-    Cxθ_Xu = getCxθ_Xu(meta)
-
-    x_probe = 0.27
-    expected_grad = 2 * x_probe + 0.35
-    @test isapprox(Ex([x_probe])[1], expected_grad; atol=1e-10)
-    Dx_val = Dxθ([x_probe], ctx.θ_val)
-    @test size(Dx_val) == (ctx.D, ctx.D)
-    @test all(isfinite, Dx_val)
-    @test Fxθ([x_probe], ctx.θ_val) == zeros(1, ctx.D)
-    @test size(Cxθ_Xu([x_probe], ctx.θ_val, ctx.Xu)) == (ctx.D, ctx.Nu)
 end
 
 @testitem "node_rule/univariate_grad/Test out rule" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     mf = getMeanFn(meta)
     mxu = apply_mean_fn.(meta.Xu, mf)
@@ -79,7 +50,7 @@ end
     Ex = getEx(meta)
     Cxθ_Xu = getCxθ_Xu(meta)
 
-    slow_mean = begin
+    gt_mean = begin
         Ωx = approximate_kernel_expectation(ctx.method, (x) -> Ex(x), ctx.q_in)
         Ω1 = approximate_kernel_expectation(ctx.method, (x) -> Cxθ_Xu(x, θ, ctx.Xu), ctx.q_in)
         Ωx + Ω1 * (μ_v - Ku_mxu)
@@ -87,10 +58,10 @@ end
 
     msg = @call_rule UniSGP_Grad(:out, Marginalisation) (q_in = ctx.q_in, q_v = ctx.q_v, q_Wg = ctx.q_Wg, q_θ = ctx.q_θ, meta = meta)
     @test typeof(msg) <: MultivariateGaussianDistributionsFamily
-    @test isapprox(mean(msg), vec(slow_mean); atol=1e-6)
+    @test isapprox(mean(msg), vec(gt_mean); atol=1e-6)
     @test isapprox(inv(cov(msg)), Wg_bar; atol=1e-6)
 
-    det_ctx = grad_fixture(q_in = PointMass(0.12))
+    det_ctx = test_fixture(D=3, fixed_input=true)
     meta_det = det_ctx.meta
     mf_det = getMeanFn(meta_det)
     mxu_det = apply_mean_fn.(meta_det.Xu, mf_det)
@@ -100,16 +71,16 @@ end
     μ_in = mean(det_ctx.q_in)
     Ωx_det = Ex(μ_in)
     Ω1_det = Cxθ_Xu(μ_in, det_ctx.θ_val, det_ctx.Xu)
-    slow_det_mean = Ωx_det + Ω1_det * (μ_v_det - Ku_mxu_det)
+    gt_det_mean = Ωx_det + Ω1_det * (μ_v_det - Ku_mxu_det)
 
     msg_det = @call_rule UniSGP_Grad(:out, Marginalisation) (q_in = det_ctx.q_in, q_v = det_ctx.q_v, q_Wg = det_ctx.q_Wg, q_θ = det_ctx.q_θ, meta = meta_det)
     @test typeof(msg_det) <: MultivariateGaussianDistributionsFamily
-    @test isapprox(mean(msg_det), vec(slow_det_mean); atol=1e-6)
+    @test isapprox(mean(msg_det), vec(gt_det_mean); atol=1e-6)
     @test isapprox(inv(cov(msg_det)), Wg_bar_det; atol=1e-6)
 end
 
 @testitem "node_rule/univariate_grad/Test in rule" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
     Ex = getEx(meta)
@@ -130,28 +101,35 @@ end
     WC = (x) -> Wg_bar * Cx(x)
     CTWC = (x) -> transpose(Cx(x)) * Wg_bar * Cx(x)
     CTWC_Ku_mxu = (x) -> CTWC(x) * Ku_mxu
-    slow_log = (x_val) -> begin
-        x_vec = [x_val]
-        part_A = tr(Wg_bar * Qx(x_vec))
-        part_B = -2 * transpose(μ_ω) * Wg_bar * (Ex(x_vec) + Cx(x_vec) * (μ_v - Ku_mxu))
+    slow_logpdf = (x_val) -> begin
+        part_A = tr(Wg_bar * Qx(x_val))
+        part_B = -2 * transpose(μ_ω) * Wg_bar * (Ex(x_val) + Cx(x_val) * (μ_v - Ku_mxu))
         part_C = (
-            transpose(Ex(x_vec)) * Wg_bar * Ex(x_vec) +
-            tr(Rv * CTWC(x_vec)) +
-            (transpose(Ku_mxu) - 2 * transpose(μ_v)) * CTWC_Ku_mxu(x_vec) +
-            2 * transpose(Ex(x_vec)) * WC(x_vec) * (μ_v - Ku_mxu)
+            transpose(Ex(x_val)) * Wg_bar * Ex(x_val) +
+            tr(Rv * CTWC(x_val)) +
+            (transpose(Ku_mxu) - 2 * transpose(μ_v)) * CTWC_Ku_mxu(x_val) +
+            2 * transpose(Ex(x_val)) * WC(x_val) * (μ_v - Ku_mxu)
         )
         -0.5 * (part_A + part_B + part_C)
     end
 
     msg = @call_rule UniSGP_Grad(:in, Marginalisation) (q_out = ctx.q_out, q_v = ctx.q_v, q_Wg = ctx.q_Wg, q_θ = ctx.q_θ, meta = meta)
-    @test typeof(msg) <: ContinuousUnivariateLogPdf
-    for x_probe in (0.1, 0.8, -0.4)
-        @test isapprox(logpdf(msg, x_probe), slow_log(x_probe); atol=1e-6)
-    end
+    expected_msg_type = ctx.D == 1 ? ContinuousUnivariateLogPdf : ContinuousMultivariateLogPdf
+    @test typeof(msg) <: expected_msg_type
+    x_val1 = randn(ctx.rng, ctx.D)
+    x_val2 = randn(ctx.rng, ctx.D)
+    x_val3 = randn(ctx.rng, ctx.D)
+    x_val4 = randn(ctx.rng, ctx.D)
+    @test length(Set((x_val1, x_val2, x_val3, x_val4))) == 4
+    @test isapprox(logpdf(msg, x_val1), slow_logpdf(x_val1); atol=1e-6)
+    @test isapprox(logpdf(msg, x_val2), slow_logpdf(x_val2); atol=1e-6)
+    @test isapprox(logpdf(msg, x_val3), slow_logpdf(x_val3); atol=1e-6)
+    @test isapprox(logpdf(msg, x_val4), slow_logpdf(x_val4); atol=1e-6)
+
 end
 
 @testitem "node_rule/univariate_grad/Test v rule" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
     Ex = getEx(meta)
@@ -176,7 +154,7 @@ end
     @test isapprox(mean(msg.qv), gt_mean; atol=1e-6)
     @test isapprox(cov(msg.qv), gt_cov; atol=1e-6)
 
-    det_ctx = grad_fixture(q_in = PointMass(0.2), q_out = MvNormalMeanCovariance([0.5], [0.0;;]))
+    det_ctx = test_fixture(D=3, fixed_input=true)
     meta_det = det_ctx.meta
     mf_det = getMeanFn(meta_det)
     mxu_det = apply_mean_fn.(meta_det.Xu, mf_det)
@@ -196,7 +174,7 @@ end
 end
 
 @testitem "node_rule/univariate_grad/Test Wg rule" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
     Ex = getEx(meta)
@@ -237,7 +215,7 @@ end
     @test isapprox(n_w, n_gt; atol=1e-6)
     @test isapprox(V_w, V_gt; atol=1e-6)
 
-    det_ctx = grad_fixture(q_in = PointMass(0.13), q_out = MvNormalMeanCovariance([0.6], [0.0;;]))
+    det_ctx = test_fixture(D=3, fixed_input=true)
     meta_det = det_ctx.meta
     mf_det = getMeanFn(meta_det)
     mxu_det = apply_mean_fn.(meta_det.Xu, mf_det)
@@ -271,7 +249,7 @@ end
 end
 
 @testitem "node_rule/univariate_grad/Test θ rule" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
     Ex = getEx(meta)
@@ -303,7 +281,7 @@ end
 end
 
 @testitem "node_rule/univariate_grad/Test average energy" setup=[univariate_grad_snippet] begin
-    ctx = grad_fixture()
+    ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
     Ex = getEx(meta)

@@ -5,7 +5,7 @@ using Optim, Zygote
 using Test
 using TestItemRunner
 
-@testitem "node_rule/multivariate/Test GPmeta" begin
+@testitem "node_rule/multivariate/Test Multivariate GPmeta" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
     method = srcubature()
     θ_val = [1.,1.]

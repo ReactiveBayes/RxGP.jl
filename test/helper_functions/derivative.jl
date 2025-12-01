@@ -21,7 +21,7 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
     method = ghcubature(21)
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_GP_meta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
     mf = getMeanFn(Unimeta)
     mxu = apply_mean_fn.(Unimeta.Xu, mf)
     KuuF = fastcholesky(kernelmatrix(kernel(θ_val),Unimeta.Xu))
