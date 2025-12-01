@@ -34,5 +34,5 @@
 
     log_backwardmess = (θ) -> -0.5 * tr( Wg_bar * G1(θ) ) - 0.5 * (part_A(θ) - part_B(θ))
 
-    return get_dims_theta(meta) < 2 ? ContinuousUnivariateLogPdf(log_backwardmess) : ContinuousMultivariateLogPdf(UnspecifiedDomain(), log_backwardmess)
+    return get_dims_theta(meta) == 1 ? ContinuousUnivariateLogPdf(log_backwardmess) : ContinuousMultivariateLogPdf(UnspecifiedDomain(), log_backwardmess)
 end
