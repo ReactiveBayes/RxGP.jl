@@ -1,5 +1,5 @@
 export UniSGPMeta, MultiSGPMeta
-export getmethod, getMeanFn, getInducingInput, getΨx, getΨxx, getΨ0, getΨ1_trans, getΨ2, getΨ3, getEx, getFxθ, getDxθ, getCxθ_Xu, getKuuF, getKernel, get_dims_data, get_dims_theta, getcounter, getN
+export getmethod, getMeanFn, getInducingInput, getΨx, getΨxx, getΨ0, getΨ1_trans, getΨ2, getΨ3, getEx, getFxθ, getDxθ, getCxθ_Xu, getKuuF, getKernel, get_dims_data, get_dims_theta, getUv, getcounter, getN
 export getKuuInverse, getGPCache
 
 #---- Define metas -----# 
