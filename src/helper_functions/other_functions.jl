@@ -1,23 +1,33 @@
 export jdotavx, create_blockmatrix
-export get_Ex, get_Cxθ_Xu, get_Dxθ, get_Fxθ, get_GP_meta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
+export get_Ex, get_Cxθ_Xu, get_Dxθ, get_Fxθ, get_UniSGPMeta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
 
-function jdotavx(a::AbstractArray, b::AbstractArray)
-    a_flat, b_flat = collect(vec(a)), collect(vec(b))
-    @assert axes(a_flat) == axes(b_flat)
-    @assert length(a_flat) == length(b_flat) "dot operands must have same number of elements"
-    s = zero(promote_type(eltype(a), eltype(b)))
-    @turbo for i in eachindex(a_flat, b_flat)
-        s += a_flat[i] * b_flat[i]
-    end
-    return s
+
+# ======= Single source of meta information ======= #
+function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
+    θ = typeof(θ) <: PointMass ? mean(θ) : θ
+    dims_theta = length(θ)
+    Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
+    KuuF = fastcholesky(Kuu)
+    x_dummy = zeros(D)
+    Ψx = 0.0
+    Ψxx = 0.0
+    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
+    Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu);
+    Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
+    Uv = zeros(size(Xu,1), size(Xu,1))
+
+    @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
+    Ex = get_Ex(;mean_fn=mean_fn)
+    Fxθ = get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode)
+    Dxθ = get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
+    Cxθ_Xu = get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
+
+    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
 end
 
-function create_blockmatrix(A,d,M)
-    return [view(A,i:i+M-1,j:j+M-1) for i=1:M:M*d, j=1:M:M*d]
-end
 
 # # ======= Kernel and Mean-Function Diff Functions - GENERAL ======= #
-
 # Gradient of mean function w.r.t x (vector version)
 function get_Ex(; mean_fn=mean_fn)
     return (x) -> begin
@@ -178,17 +188,17 @@ function get_Fxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
             res = ForwardDiff.gradient(z -> f(x, z), x)
             if any(isnan, res)
                 @warn "NaN encountered in Fxθ_K_obj, returning small value(s)" maxlog=1
-                return reshape(zero(res), 1, D)
+                return zeros(1, D)
             end
-            return reshape(res, 1, D)
+            return reshape(res, (1, D))
         end
 
     elseif mode == :AN
         # Analytic approach (for SE/SEn kernel only) ~ 10x faster than AutoDiff
         if kernel_spec == :SE
-            return (x, θ) -> reshape(zero(x), 1, D)
+            return (x, θ) -> zeros(1, D)
         elseif kernel_spec == :SEn
-            return (x, θ) -> reshape(zero(x), 1, D)
+            return (x, θ) -> zeros(1, D)
         else
             error("Currently only SE and SEn kernels supported for analytic Fxθ_K_obj")
         end
@@ -197,34 +207,8 @@ function get_Fxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
     end
 end
 
-# ======= Single source of meta information ======= #
-
-function get_GP_meta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
-    θ = typeof(θ) <: PointMass ? mean(θ) : θ
-    Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
-    KuuF = fastcholesky(Kuu)
-    x_dummy = zeros(D)
-    Ψx = 0.0
-    Ψxx = 0.0
-    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
-    Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
-    Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu);
-    Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
-    Uv = zeros(size(Xu,1), size(Xu,1))
-
-    @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
-    Ex = get_Ex(;mean_fn=mean_fn)
-    Fxθ = get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode)
-    Dxθ = get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    Cxθ_Xu = get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-
-    dims_theta = length(θ)
-
-    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
-end
 
 # # ================== Simple KernelFunctions.jl Kernel Builder (dimension-agnostic) ================== #
-
 function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1, num_SM::Int=1, independent_SE_lengthscales::Bool=true)
     """
         get_simple_kernel_and_params(D; kernel_spec=:SE, num_SE=1, num_SM=1)
@@ -249,7 +233,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         # SEKernel
         SE = independent_SE_lengthscales ? D + 1 : 2 # number of params (1 weight + D lengthscales or 1 shared lengthscale)
         dim_θ = SE; # number of kernel parameters
-        θ_init = StatsFuns.invsoftplus.(ones(dim_θ));
+        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)));
         kernel = (θ) -> StatsFuns.softplus(θ[1]) * with_lengthscale(SEKernel(),StatsFuns.softplus.(θ[2:SE]))
         return kernel, θ_init, dim_θ
 
@@ -257,7 +241,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         # SEKernel Mixture with shared lengthscales
         SE = 2 # number of params per component (1 weight + 1 lengthscale)
         dim_θ = SE * num_SE; # number of kernel parameters
-        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ randn(dim_θ)*0.05);
+        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)));
         @assert iseven(dim_θ) "dim_θ must be even for SEKernel mixture"
         half_dim_θ = div(dim_θ, 2)
         kernel = (θ) -> begin 
@@ -275,7 +259,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
     elseif kernel_spec == :SEn && independent_SE_lengthscales
         # SEKernel Mixture with independent lengthscales
         dim_θ = num_SE * (D+1)
-        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ 0.05*randn(dim_θ))
+        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)))
         kernel = (θ) -> begin
             kernels = [
                 StatsFuns.softplus(θ[(i-1)*(D+1)+1]) *
@@ -290,7 +274,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         # Spectral Mixture Kernel
         SM = num_SM * (2 * D + 1)  # params per SM component
         dim_θ = SM # number of kernel parameters
-        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ randn(dim_θ) * 0.05)
+        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)))
         # Spectral mixture with num_SM components
         kernel_SM = (θ) -> begin
             weights = StatsFuns.softplus.(θ[1:num_SM])
@@ -306,7 +290,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         SE = independent_SE_lengthscales ? num_SE * (D + 1) : num_SE * 2  # params per SE component (weight + lengthscale(s))
         SM = num_SM * (2 * D + 1)  # params per SM component
         dim_θ = SE + SM # number of kernel parameters
-        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ randn(dim_θ) * 0.05)
+        θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)))
         
         # Mixture of num_SE SE kernels
         kernel_SE = (θ) -> begin
@@ -340,6 +324,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
     end
 end
 
+
 # ==== ======= Mean Function Application Helper (handles scalars, vectors, vectors of vectors) ======= #
 """
     apply_mean_fn(x, mf)
@@ -351,6 +336,7 @@ Apply a SCALAR mean function `mf` to input `x`, handling different input types:
 """
 apply_mean_fn(x::Number, mf) = mf(x) # scalar
 apply_mean_fn(x::AbstractVector{<:Number}, mf) = begin length(x) == 1 ? mf(x[1]) : mf(x) end # length-1 vector of numbers
+
 
 # ==================== Expanded mean_cov functionality to enforce return types ======================== #
 """
@@ -407,4 +393,21 @@ function mean_cov_vector_matrix(x::AbstractVector{<:Union{PointMass,UnivariateNo
         error("Unsupported input: Input should represent a single item, not a list of items")
     end
     mean_cov_vector_matrix(x[1])
+end
+
+
+# ==================== Miscellaneous ======================== #
+function jdotavx(a::AbstractArray, b::AbstractArray)
+    a_flat, b_flat = collect(vec(a)), collect(vec(b))
+    @assert axes(a_flat) == axes(b_flat)
+    @assert length(a_flat) == length(b_flat) "dot operands must have same number of elements"
+    s = zero(promote_type(eltype(a), eltype(b)))
+    @turbo for i in eachindex(a_flat, b_flat)
+        s += a_flat[i] * b_flat[i]
+    end
+    return s
+end
+
+function create_blockmatrix(A,d,M)
+    return [view(A,i:i+M-1,j:j+M-1) for i=1:M:M*d, j=1:M:M*d]
 end
