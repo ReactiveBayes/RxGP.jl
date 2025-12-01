@@ -4,9 +4,6 @@ using ExponentialFamilyProjection
 # We include it here to showcase our examples that need to combine non-conjugate messages from the univariate
 # and univariate_grad nodes with Guassian priors.
 
-# ================== Prod rule definitions ================== #
-# ==== Multivariate ==== #
-
 function ReactiveMP.prod(::GenericProd, left::NormalDistributionsFamily, right::Union{ContinuousUnivariateLogPdf, ContinuousMultivariateLogPdf})
     dims = length(left)
     function total_logpdf(x) return dims == 1 ? logpdf(left, only(x)) + logpdf(right, only(x)) : logpdf(left, x) + logpdf(right, x) end
