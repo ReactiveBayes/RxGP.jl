@@ -8,6 +8,8 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
 
 @testitem "helper_functions/derivative/UniDerivative" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     D = 1
     Nu = 10
     Xu = collect(1:Nu)

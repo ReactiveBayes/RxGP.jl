@@ -9,6 +9,8 @@
     using LinearAlgebra
     using StatsFuns
     using Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
 
     const grad_default_method = ReactiveMP.ghcubature(21)
 

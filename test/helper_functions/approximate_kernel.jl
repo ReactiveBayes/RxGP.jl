@@ -41,6 +41,7 @@ end
 @testitem "helper_functions/approximate_kernel/approximate_kernel_expectation" setup=[setup_snippet] begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
     import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+    
     ctx = test_fixture(;D=1)
     method = ctx.method
     q_x = ctx.q_x

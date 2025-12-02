@@ -7,6 +7,8 @@ using TestItemRunner
 
 @testitem "node_rule/multivariate/Test Multivariate GPmeta" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -32,6 +34,8 @@ end
 
 @testitem "node_rule/multivariate/Test out rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -67,6 +71,8 @@ end
 
 @testitem "node_rule/multivariate/Test in rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Optim, Zygote, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -109,6 +115,8 @@ end
 
 @testitem "node_rule/multivariate/Test v rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -146,6 +154,8 @@ end
 
 @testitem "node_rule/multivariate/Test w rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -178,6 +188,8 @@ end
 
 @testitem "node_rule/multivariate/Test θ rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25
@@ -223,6 +235,8 @@ end
 
 @testitem "node_rule/multivariate/Average energy" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = srcubature()
     θ_val = [1.,1.]
     Nu_2d = 25

@@ -1,5 +1,6 @@
 @testitem "node_rule/univariate/Test out rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
 
     method = ghcubature(21)
     Nu = 10
@@ -47,6 +48,8 @@ end
 
 @testitem "node_rule/univariate/Test in rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+    
     method = ghcubature(21)
     Nu = 10
     Xu = collect(1:Nu)
@@ -103,6 +106,8 @@ end
 
 @testitem "node_rule/univariate/Test v rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = ghcubature(21)
     Nu = 10
     Xu = collect(1:Nu)
@@ -161,7 +166,9 @@ end
 end
 
 @testitem "node_rule/univariate/Test w rule" begin
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+
     method = ghcubature(21)
     Nu = 10
     Xu = collect(1:Nu)
@@ -258,6 +265,8 @@ end
 
 @testitem "node_rule/univariate/Test θ rule" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = ghcubature(21)
     Nu = 10
     Xu = collect(1:Nu)
@@ -344,6 +353,8 @@ end
 
 @testitem "node_rule/univariate/Test average energy" begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
+    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
+
     method = ghcubature(21)
     Nu = 10
     Xu = collect(1:Nu)
