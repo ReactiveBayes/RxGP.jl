@@ -1,5 +1,3 @@
-export approximate_kernel_expectation
-
 """
    approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: NormalDistributionsFamily}
    

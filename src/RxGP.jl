@@ -4,7 +4,7 @@ using RxInfer, LoopVectorization, ReactiveMP
 using Zygote, Optim, ForwardDiff, StatsFuns, KernelFunctions, LinearAlgebra
 using AbstractGPs, Flux, Random, SparseArrays, SpecialFunctions, StableRNGs
 
-import ReactiveMP: getweights, getpoints, approximate_meancov, WishartFast, approximate_kernel_expectation
+import ReactiveMP: getweights, getpoints, approximate_meancov, WishartFast
 
 # other
 include("types.jl")

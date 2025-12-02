@@ -38,28 +38,26 @@
     end
 end
 
-@testitem "helper_functions/approximate_kernel/approximate_kernel_expectation" setup=[setup_snippet] begin
+@testitem "helper_functions/approximate_kernel/RxGP.approximate_kernel_expectation" setup=[setup_snippet] begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
-    import ReactiveMP: approximate_kernel_expectation, approximate_kernel_expectation!
     ctx = test_fixture(;D=1)
     method = ctx.method
     q_x = ctx.q_x
 
-    # make sure we add new methods for approximate_kernel_expectation properly
+    # make sure we add new methods for RxGP.approximate_kernel_expectation properly
     # make sure the function works as expected
     foo1(x) = 2*x
-    @test length(methods(approximate_kernel_expectation)) == length(methods(ReactiveMP.approximate_kernel_expectation))
-    @test approximate_kernel_expectation(method,foo1,q_x) == approximate_kernel_expectation(method, foo1, mean(q_x),var(q_x))
-    @test isapprox(approximate_kernel_expectation(method,foo1,q_x),2*mean(q_x); atol=1e-9)
-    @test approximate_kernel_expectation(GenUT(),foo1,q_x) ≈ 2*mean(q_x)
+    @test RxGP.approximate_kernel_expectation(method,foo1,q_x) == RxGP.approximate_kernel_expectation(method, foo1, mean(q_x),var(q_x))
+    @test isapprox(RxGP.approximate_kernel_expectation(method,foo1,q_x),2*mean(q_x); atol=1e-9)
+    @test RxGP.approximate_kernel_expectation(GenUT(),foo1,q_x) ≈ 2*mean(q_x)
 
     foo1_2d(x) = [2*x, x]
     gbar = [1.5,0.5]
-    @test approximate_kernel_expectation!(gbar, method, foo1_2d, mean(q_x), var(q_x)) == gbar
-    @test approximate_kernel_expectation!(gbar, method, foo1_2d, q_x) == approximate_kernel_expectation!(gbar, method, foo1_2d, mean(q_x), var(q_x))
-    @test approximate_kernel_expectation(method,foo1_2d,q_x) == approximate_kernel_expectation(method, foo1_2d, mean(q_x),var(q_x))
-    @test isapprox(approximate_kernel_expectation(method,foo1_2d,q_x),[2*mean(q_x), mean(q_x)]; atol=1e-9)
-    @test approximate_kernel_expectation(GenUT(),foo1_2d,q_x) ≈ [2*mean(q_x), mean(q_x)]
+    @test RxGP.approximate_kernel_expectation!(gbar, method, foo1_2d, mean(q_x), var(q_x)) == gbar
+    @test RxGP.approximate_kernel_expectation!(gbar, method, foo1_2d, q_x) == RxGP.approximate_kernel_expectation!(gbar, method, foo1_2d, mean(q_x), var(q_x))
+    @test RxGP.approximate_kernel_expectation(method,foo1_2d,q_x) == RxGP.approximate_kernel_expectation(method, foo1_2d, mean(q_x),var(q_x))
+    @test isapprox(RxGP.approximate_kernel_expectation(method,foo1_2d,q_x),[2*mean(q_x), mean(q_x)]; atol=1e-9)
+    @test RxGP.approximate_kernel_expectation(GenUT(),foo1_2d,q_x) ≈ [2*mean(q_x), mean(q_x)]
 
     
     ctx = test_fixture(;D=3)
@@ -67,24 +65,22 @@ end
     q_x = ctx.q_x
     μ_x = mean(q_x)
 
-    # make sure we add new methods for approximate_kernel_expectation properly
+    # make sure we add new methods for RxGP.approximate_kernel_expectation properly
     # make sure the function works as expected
     foo2(x) = 2*sum(x)
-    @test length(methods(approximate_kernel_expectation)) == length(methods(ReactiveMP.approximate_kernel_expectation))
-    @test approximate_kernel_expectation(method,foo2,q_x) == approximate_kernel_expectation(method, foo2, mean(q_x),cov(q_x))
-    @test isapprox(approximate_kernel_expectation(method,foo2,q_x),2*sum(μ_x); atol=1e-9)
+    @test RxGP.approximate_kernel_expectation(method,foo2,q_x) == RxGP.approximate_kernel_expectation(method, foo2, mean(q_x),cov(q_x))
+    @test isapprox(RxGP.approximate_kernel_expectation(method,foo2,q_x),2*sum(μ_x); atol=1e-9)
 
     foo2_2d(x) = [2*sum(x), sum(x)]
     gbar = [1.5,0.5]
-    @test approximate_kernel_expectation!(gbar, method, foo2_2d, mean(q_x), cov(q_x)) == gbar
-    @test approximate_kernel_expectation!(gbar, method, foo2_2d, q_x) == approximate_kernel_expectation!(gbar, method, foo2_2d, mean(q_x), cov(q_x))
-    @test approximate_kernel_expectation(method,foo2_2d,q_x) == approximate_kernel_expectation(method, foo2_2d, mean(q_x),cov(q_x))
-    @test isapprox(ReactiveMP.approximate_kernel_expectation(method,foo2_2d,q_x),[2*sum(μ_x), sum(μ_x)]; atol=1e-9)
+    @test RxGP.approximate_kernel_expectation!(gbar, method, foo2_2d, mean(q_x), cov(q_x)) == gbar
+    @test RxGP.approximate_kernel_expectation!(gbar, method, foo2_2d, q_x) == RxGP.approximate_kernel_expectation!(gbar, method, foo2_2d, mean(q_x), cov(q_x))
+    @test RxGP.approximate_kernel_expectation(method,foo2_2d,q_x) == RxGP.approximate_kernel_expectation(method, foo2_2d, mean(q_x),cov(q_x))
+    @test isapprox(RxGP.approximate_kernel_expectation(method,foo2_2d,q_x),[2*sum(μ_x), sum(μ_x)]; atol=1e-9)
 end
 
 @testitem "helper_functions/approximate_kernel/GP quantities approximation" setup=[setup_snippet] begin
     using RxGP, RxInfer, ReactiveMP, Random, Distributions, StableRNGs, KernelFunctions, LinearAlgebra, Test
-    import RxGP: approximate_kernel_expectation, approximate_kernel_expectation!
 
     ctx = test_fixture(;D=3)
     meta = ctx.meta
@@ -124,12 +120,12 @@ end
     Ψ3_gt = mean(Ψ3_func.(sample_x))
 
     # univariate approx expectations
-    Ψx_approx = approximate_kernel_expectation(method, (x) -> [apply_mean_fn(x, mf)], q_x)[]
-    Ψxx_approx = approximate_kernel_expectation(method, (x) -> [apply_mean_fn(x, mf) * apply_mean_fn(x, mf)], q_x)[]
-    Ψ0_approx = approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), [x], [x]), q_x)[]
-    Ψ1_approx = approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), [x], Xu), q_x)
-    Ψ2_approx = approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), Xu, [x]) * kernelmatrix(kernel(θ_val), [x], Xu), q_x)
-    Ψ3_approx = approximate_kernel_expectation(method, (x) -> apply_mean_fn(x, mf) * kernelmatrix(kernel(θ_val), [x], Xu), q_x)
+    Ψx_approx = RxGP.approximate_kernel_expectation(method, (x) -> [apply_mean_fn(x, mf)], q_x)[]
+    Ψxx_approx = RxGP.approximate_kernel_expectation(method, (x) -> [apply_mean_fn(x, mf) * apply_mean_fn(x, mf)], q_x)[]
+    Ψ0_approx = RxGP.approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), [x], [x]), q_x)[]
+    Ψ1_approx = RxGP.approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), [x], Xu), q_x)
+    Ψ2_approx = RxGP.approximate_kernel_expectation(method, (x) -> kernelmatrix(kernel(θ_val), Xu, [x]) * kernelmatrix(kernel(θ_val), [x], Xu), q_x)
+    Ψ3_approx = RxGP.approximate_kernel_expectation(method, (x) -> apply_mean_fn(x, mf) * kernelmatrix(kernel(θ_val), [x], Xu), q_x)
 
     # ground truth univariate grad functions
     Ωx_func = (x) -> Ex(x)
@@ -166,21 +162,21 @@ end
     Ω13_gt = mean(Ω13_func.(sample_x))
 
     # univariate_grad approx expectations
-    Ωx_approx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_x)
-    Ω0_approx = approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ_val), q_x)
-    Ω1_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu), q_x)
-    Ω2_approx = approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ_val, meta.Xu)) * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
-    Ω3_approx = approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ_val, meta.Xu)) * Wg_bar * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
-    Ω4_approx = approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x)) * Wg_bar * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
-    Ω5_approx = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ex(x)), q_x)
-    Ω6_approx = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(μ_v) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
-    Ω7_approx = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
-    Ω8_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * μ_v * transpose(Ex(x)), q_x)
-    Ω9_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Rv * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
-    Ω10_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * μ_v * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
-    Ω11_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(Ex(x)), q_x)
-    Ω12_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(μ_v) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
-    Ω13_approx = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ωx_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_x)
+    Ω0_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ_val), q_x)
+    Ω1_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu), q_x)
+    Ω2_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ_val, meta.Xu)) * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
+    Ω3_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ_val, meta.Xu)) * Wg_bar * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
+    Ω4_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x)) * Wg_bar * Cxθ_Xu(x, θ_val, meta.Xu), q_x)
+    Ω5_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ex(x)), q_x)
+    Ω6_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(μ_v) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ω7_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ω8_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * μ_v * transpose(Ex(x)), q_x)
+    Ω9_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Rv * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ω10_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * μ_v * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ω11_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(Ex(x)), q_x)
+    Ω12_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(μ_v) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
+    Ω13_approx = RxGP.approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ_val, meta.Xu) * Ku_mxu * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ_val, meta.Xu)), q_x)
     
     # univariate tests
     @test isapprox(Ψx_gt, Ψx_approx ;atol = 5e-2)
