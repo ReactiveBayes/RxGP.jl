@@ -34,8 +34,8 @@ function predict_GP_values(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v
     kxx = kernelmatrix_diag(kernel(θ), m_in)
     Kxu = kernelmatrix(kernel(θ), m_in, Xu)
 
-    predictions_mean_ = []
-    predictions_var_ = []
+    predictions_mean_ = Float64[]
+    predictions_var_ = Float64[]
 
     for i in eachindex(m_in)
         Ψ0 = [kxx[i];;]
@@ -88,8 +88,8 @@ function predict_GP_gradients(; m_in::AbstractVector{<:AbstractVector{<:Real}}, 
     D_ = Dx.(m_in)
     C_ = Cx.(m_in)
 
-    predictions_mean_ = []
-    predictions_cov_ = []
+    predictions_mean_ = Vector{Float64}[]
+    predictions_cov_ = Matrix{Float64}[]
 
     for i in eachindex(m_in)
         E = E_[i]
@@ -150,8 +150,8 @@ function predict_GP_joints(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v
     D_ = Dx.(m_in)
     C_ = Cx.(m_in)
 
-    predictions_mean_ = []
-    predictions_cov_ = []
+    predictions_mean_ = Vector{Float64}[]
+    predictions_cov_ = Matrix{Float64}[]
 
     for i in eachindex(m_in)
         Ψ0 = [kxx[i];;]
