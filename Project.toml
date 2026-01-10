@@ -1,7 +1,7 @@
 name = "RxGP"
 uuid = "8e06354a-9460-4f50-98fd-90b481720b65"
-authors = ["HoangMHNguyen <m.h.n.hoang@tue.nl> and contributors"]
 version = "1.0.0-DEV"
+authors = ["HoangMHNguyen <m.h.n.hoang@tue.nl> and contributors"]
 
 [deps]
 AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
@@ -39,7 +39,7 @@ GraphPPL = "4.6.2"
 KernelFunctions = "0.10.65"
 LinearAlgebra = "1.11.0"
 LoopVectorization = "0.12.172"
-Optim = "1.13.2"
+Optim = "1.13.2, 2"
 Random = "1.11.0"
 ReactiveMP = "5.5.0"
 Revise = "3.8.0"
