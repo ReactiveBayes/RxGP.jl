@@ -1,34 +1,11 @@
 # This file defines the Sparse Gaussian Process (SGP) node for multivariate case
 # y = f(x), where y has dimension D_y, and x has dimension D_x
 
-export MultiSGP, MultiSGPMeta
-export getInducingInput, getΨ0, getΨ1_trans, getΨ2, getKuuInverse, getKernel, getGPCache, getmethod
-
+export MultiSGP
 
 struct MultiSGP end 
 
 @node MultiSGP Stochastic [ out, in, v , w, θ] ## out: output, in: input,  v: transformed-inducing points Kuu_inv * u , w: precision of process noise 
-
-#---- Define meta ----#
-mutable struct MultiSGPMeta{I,K}
-    method      :: Union{Nothing,AbstractApproximationMethod}
-    Xu          :: I    # inducing inputs
-    Ψ0          :: Matrix{Float64}
-    Ψ1_trans    :: Matrix{Float64}
-    Ψ2          :: Matrix{Float64}
-    Kuu_inverse :: Matrix{Float64}
-    kernel      :: K
-    GPCache     :: Union{Nothing,GPCache}
-end
-getInducingInput(meta::MultiSGPMeta) = meta.Xu
-# getCoregionalizationMatrix(meta::MultiSGPMeta) = meta.C
-getΨ0(meta::MultiSGPMeta) = meta.Ψ0 
-getΨ1_trans(meta::MultiSGPMeta) = meta.Ψ1_trans
-getΨ2(meta::MultiSGPMeta) = meta.Ψ2
-getKuuInverse(meta::MultiSGPMeta) = meta.Kuu_inverse
-getKernel(meta::MultiSGPMeta) = meta.kernel
-getGPCache(meta::MultiSGPMeta) = meta.GPCache
-getmethod(meta::MultiSGPMeta) = meta.method
 
 #---- Average energy ----#
 @average_energy MultiSGP (q_out::MultivariateNormalDistributionsFamily, q_in::MultivariateGaussianDistributionsFamily, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin

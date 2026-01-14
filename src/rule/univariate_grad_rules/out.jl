@@ -1,0 +1,24 @@
+# rule for "out" (univariate gradient case)
+@rule UniSGP_Grad(:out, Marginalisation) (q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_Wg::NOISE_Wg, q_θ::PointMass, meta::UniSGPMeta,) = begin
+    θ = mean(q_θ)
+    μ_v = mean(q_v)
+    μ_in, Σ_in = mean_cov_vector_matrix(q_in)
+    Wg_bar = mean(q_Wg)
+    mf = getMeanFn(meta)
+    mxu = apply_mean_fn.(meta.Xu, mf)
+    Ku_mxu = meta.KuuF \ mxu
+    Ex = getEx(meta)
+    Cxθ_Xu = getCxθ_Xu(meta)
+
+    if q_in isa Distribution
+        Ωx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_in)
+        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in)
+    else
+        Ωx = Ex(μ_in)
+        Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
+    end
+
+    μ_ω = Ωx + Ω1 * (μ_v - Ku_mxu)
+
+    return MvNormalMeanPrecision(μ_ω, Wg_bar)
+end

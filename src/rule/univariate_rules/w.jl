@@ -1,63 +1,48 @@
 # rule for "w" edge (univariate case)
-
-@rule UniSGP(:w, Marginalisation) (q_out::UnivariateGaussianDistributionsFamily, q_in::UnivariateGaussianDistributionsFamily,
-            q_v::MultivariateNormalDistributionsFamily,q_θ::PointMass,meta::UniSGPMeta,) = begin
-    μ_y, v_y = mean_var(q_out)
-    μ_v = mean(q_v)
-    Xu = getInducingInput(meta)
-    kernel = getKernel(meta)
+@rule UniSGP(:w, Marginalisation) (q_out::IN_OUT, q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_θ::PointMass, meta::UniSGPMeta,) = begin
+    μ_y, Σ_y = mean_cov_scalar_matrix(q_out)
     θ = mean(q_θ)
+    kernel = getKernel(meta)
+    μ_v, Σ_v = mean_cov_vector_matrix(q_v)
+    mf = getMeanFn(meta)
+    mxu = apply_mean_fn.(meta.Xu, mf)
+    Ku_mxu = meta.KuuF \ mxu
+    Rv = Σ_v + μ_v * μ_v'
+
+    if q_in isa Distribution
+        meta.Ψx = approximate_kernel_expectation(meta.method, (x) -> [apply_mean_fn(x, mf)], q_in)[1]
+        meta.Ψxx = approximate_kernel_expectation(meta.method, (x) -> [apply_mean_fn(x, mf) * apply_mean_fn(x, mf)], q_in)[1]
+        meta.Ψ0 = approximate_kernel_expectation(meta.method,(x) -> kernelmatrix(kernel(θ), [x], [x]), q_in)[1]
+        meta.Ψ1_trans = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]), q_in)
+        meta.Ψ2 = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in) + 1e-8*I
+        meta.Ψ3 = approximate_kernel_expectation(meta.method, (x) -> apply_mean_fn(x, mf) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in)
+    else
+        μ_in, Σ_in = mean_cov_vector_matrix(q_in)
+        meta.Ψx = apply_mean_fn(μ_in, mf)
+        meta.Ψxx = meta.Ψx^2
+        meta.Ψ0 = kernelmatrix(kernel(θ), [μ_in], [μ_in])[1]
+        meta.Ψ1_trans = kernelmatrix(kernel(θ), meta.Xu, [μ_in])
+        meta.Ψ2 = kernelmatrix(kernel(θ), meta.Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], meta.Xu) + 1e-8*I
+        meta.Ψ3 = meta.Ψx * kernelmatrix(kernel(θ), [μ_in], meta.Xu)
+    end
+
+    Ψ2_Ku_mxu = meta.Ψ2 * Ku_mxu
+
+    I1 = meta.Ψ0
+    α = meta.KuuF.L \ meta.Ψ1_trans
+    I1 -= jdotavx(α,α) #I1 = meta.Ψ0 - tr( meta.KuuF \ meta.Ψ2 )
+
+    I4 = (
+        μ_y^2 
+        + Σ_y[1,1]
+        - 2*μ_y*( meta.Ψx + jdotavx(meta.Ψ1_trans, (μ_v - Ku_mxu)) )
+        + meta.Ψxx 
+        + tr(Rv * meta.Ψ2)
+        + jdotavx(Ku_mxu, Ψ2_Ku_mxu)
+        + 2*jdotavx(meta.Ψ3, (μ_v - Ku_mxu)) 
+        - 2*jdotavx(μ_v, Ψ2_Ku_mxu)
+    )
+    I4 = clamp(I4, 1e-12, 1e12)
     
-    Ψ0 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], [x]),q_in)[1]
-    Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], meta.Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), meta.Xu, [x]) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in) + 1e-8*I 
-
-    I1 = clamp(Ψ0 - tr(meta.KuuL' \ (meta.KuuL \ Ψ2)),1e-12,1e12)
-    I2 = clamp(μ_y^2 + v_y -2*μ_y * dot(Ψ1, μ_v) + tr(meta.Uv' * meta.Uv * Ψ2 ),1e-12,1e12)
-    return GammaShapeRate(1.5, 0.5*(I1 + I2))
-end
-
-
-@rule UniSGP(:w, Marginalisation) (q_out::PointMass, q_in::PointMass, q_v::MultivariateNormalDistributionsFamily,q_θ::PointMass, meta::UniSGPMeta,) = begin
-    μ_y = mean(q_out)
-    μ_in = mean(q_in)
-    θ = mean(q_θ)
-    kernel = getKernel(meta)
-    μ_v = mean(q_v)
-
-    Ψ0 = similar(meta.Ψ0)
-    Ψ1_trans = similar(meta.Ψ1_trans) 
-    kernelmatrix!(Ψ0,kernel(θ), [μ_in], [μ_in])
-    kernelmatrix!(Ψ1_trans,kernel(θ),meta.Xu, [μ_in])
-
-    α = meta.KuuL \ Ψ1_trans
-    Ψ0 .-= jdotavx(α,α) #I1
-
-    I2 = μ_y^2 - 2*μ_y*jdotavx(Ψ1_trans,μ_v)
-    mul!(Ψ1_trans,meta.Uv,Ψ1_trans)
-    I2 += jdotavx(Ψ1_trans,Ψ1_trans) 
-
-    return GammaShapeRate(1.5, 0.5*(Ψ0[1] + I2))
-end
-
-
-@rule UniSGP(:w, Marginalisation) (q_out::UnivariateGaussianDistributionsFamily, q_in::PointMass, q_v::MultivariateNormalDistributionsFamily,q_θ::PointMass, meta::UniSGPMeta,) = begin
-    μ_y, v_y = mean_var(q_out)
-    μ_v = mean(q_v)
-    μ_in = mean(q_in)
-    θ = mean(q_θ)
-    kernel = getKernel(meta)
-
-    Ψ0 = similar(meta.Ψ0)
-    Ψ1_trans = similar(meta.Ψ1_trans)
-    kernelmatrix!(Ψ0,kernel(θ), [μ_in], [μ_in])
-    kernelmatrix!(Ψ1_trans,kernel(θ),meta.Xu, [μ_in])
-
-    α = meta.KuuL \ Ψ1_trans
-    Ψ0 .-= jdotavx(α,α) #I1
-
-    I2 = μ_y^2 + v_y - 2*μ_y*jdotavx(Ψ1_trans,μ_v) 
-    mul!(Ψ1_trans,meta.Uv,Ψ1_trans)
-    I2 += jdotavx(Ψ1_trans,Ψ1_trans) 
-    return GammaShapeRate(1.5, 0.5*(Ψ0[1] + I2))
+    return GammaShapeRate(1.5, 0.5*(I1 + I4))
 end

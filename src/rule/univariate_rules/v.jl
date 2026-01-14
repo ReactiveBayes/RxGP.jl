@@ -1,66 +1,27 @@
-export BufferUniSGP
-mutable struct BufferUniSGP{D,M} 
-    qv      :: D 
-    meta    :: M
-end 
-
-function ReactiveMP.prod(::GenericProd, left::NormalDistributionsFamily, right::BufferUniSGP)
-    marginal_v = ReactiveMP.prod(GenericProd(),left,right.qv)
-    right.meta.counter += 1
-    if right.meta.counter == right.meta.N 
-        μ_v, Σ_v = mean_cov(marginal_v)
-        mul!(Σ_v,μ_v,μ_v',1,1) 
-        Uv = fastcholesky!(Σ_v).U
-        right.meta.Uv = Uv
-        right.meta.counter = 0
-    end
-    return marginal_v
-end
-
 # rule for "v" edge (univariate case)
- 
-@rule UniSGP(:v, Marginalisation) (q_out::UnivariateNormalDistributionsFamily, q_in::UnivariateNormalDistributionsFamily, q_w::Any,q_θ::PointMass, meta::UniSGPMeta) = begin
-    w = mean(q_w)
-    μ_y = mean(q_out)
+@rule UniSGP(:v, Marginalisation) (q_out::IN_OUT, q_in::IN_OUT, q_w::NOISE_w, q_θ::PointMass, meta::UniSGPMeta) = begin
+    w_bar = mean(q_w)
     θ = mean(q_θ)
+    μ_y, Σ_y = mean_cov_scalar_matrix(q_out)
     kernel = getKernel(meta)
-    
-    # Ψ1_trans = similar(meta.Ψ1_trans)
-    # Ψ2 = similar(meta.Ψ2)
-    Ψ1_trans = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ),meta.Xu, [x]),q_in) 
-    Ψ2 =  approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), meta.Xu, [x]) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in) + 1e-8*I
-    
-    Ψ1_trans .*= μ_y * w #weighted-mean μ_y * w * Ψ1_transpose
-    Ψ2 .*= w  #precision W_v = w * Ψ2
-    return BufferUniSGP(MvNormalWeightedMeanPrecision(vec(Ψ1_trans), Ψ2),meta)
+    mf = getMeanFn(meta)
+    mxu = apply_mean_fn.(meta.Xu, mf)
+    Ku_mxu = meta.KuuF \ mxu
+
+    if q_in isa Distribution
+        meta.Ψ1_trans = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]), q_in)
+        meta.Ψ2 = approximate_kernel_expectation(meta.method, (x) -> kernelmatrix(kernel(θ), meta.Xu, [x]) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in) + 1e-8*I
+        meta.Ψ3 = approximate_kernel_expectation(meta.method, (x) -> apply_mean_fn(x, mf) * kernelmatrix(kernel(θ), [x], meta.Xu), q_in)
+    else
+        μ_in, Σ_in = mean_cov_vector_matrix(q_in)
+        mx = apply_mean_fn(μ_in, mf)
+        meta.Ψ1_trans = kernelmatrix(kernel(θ), meta.Xu, [μ_in])
+        meta.Ψ2 = kernelmatrix(kernel(θ), meta.Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], meta.Xu) + 1e-8*I
+        meta.Ψ3 = mx * kernelmatrix(kernel(θ), [μ_in], meta.Xu)
+    end
+
+    W_v = w_bar * meta.Ψ2
+    ξ_v = vec(w_bar * (μ_y * meta.Ψ1_trans - transpose(meta.Ψ3)) + w_bar * meta.Ψ2 * Ku_mxu)
+
+    return BufferUniSGP(MvNormalWeightedMeanPrecision(ξ_v, W_v), meta)
 end
-
-@rule UniSGP(:v, Marginalisation) (q_out::PointMass, q_in::PointMass, q_w::Any,q_θ::PointMass,meta::UniSGPMeta) = begin
-    w = mean(q_w)
-    θ = mean(q_θ)
-    μ_y = mean(q_out)
-    μ_in = mean(q_in)
-    kernel = getKernel(meta)
-
-    Ψ1_trans = similar(meta.Ψ1_trans)
-    kernelmatrix!(Ψ1_trans,kernel(θ),meta.Xu, [μ_in])
-
-    mul!(meta.Ψ2,Ψ1_trans,Ψ1_trans',w,0) #W = w * Ψ1_trans * Ψ1_trans'
-    Ψ1_trans .*= μ_y * w
-    return BufferUniSGP(MvNormalWeightedMeanPrecision(vec(Ψ1_trans), meta.Ψ2),meta)
-end
-
-@rule UniSGP(:v, Marginalisation) (q_out::UnivariateGaussianDistributionsFamily, q_in::PointMass, q_w::Any, q_θ::PointMass, meta::UniSGPMeta) = begin 
-    w = mean(q_w)
-    μ_y = mean(q_out)
-    μ_in = mean(q_in)
-    θ = mean(q_θ)
-    kernel = getKernel(meta)
-
-    Ψ1_trans = similar(meta.Ψ1_trans)
-    kernelmatrix!(Ψ1_trans,kernel(θ),meta.Xu, [μ_in])
-    mul!(meta.Ψ2,Ψ1_trans,Ψ1_trans',w,0) #W = w * Ψ1_trans * Ψ1_trans'
-    Ψ1_trans .*= μ_y * w
-    return BufferUniSGP(MvNormalWeightedMeanPrecision(vec(Ψ1_trans), meta.Ψ2),meta)
-end
-########

@@ -1,64 +1,27 @@
-using ReactiveMP
-import ReactiveMP: getweights, getpoints, approximate_meancov, approximate_kernel_expectation
-
-export approximate_kernel_expectation!, approximate_kernel_expectation
-# univariate case 
-function ReactiveMP.prod(::GenericProd, left::UnivariateGaussianDistributionsFamily, right::ContinuousUnivariateLogPdf) 
-    m,v = approximate_meancov(ghcubature(21),(x) -> exp(right.logpdf(x)),left)
-    if isnan(m) || isnan(v)
-        return left 
-    else
-        return NormalMeanVariance(m,v + 1e-6)
-    end
-end
-function ReactiveMP.prod(::GenericProd, left::ContinuousUnivariateLogPdf, right::UnivariateGaussianDistributionsFamily) 
-    m,v = approximate_meancov(ghcubature(21),(x) -> exp(left.logpdf(x)),right)
-    if isnan(m) || isnan(v)
-        return right
-    else
-        return NormalMeanVariance(m,v)
-    end
+"""
+   approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: NormalDistributionsFamily}
+   
+Approximate the expectation E[g(x)] where x ~ distribution using the specified approximation method.
+"""
+function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: NormalDistributionsFamily}
+    return approximate_kernel_expectation(method, g, mean(distribution), cov(distribution))
 end
 
-#univariate case
-function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, m::Real, P::Real)
+function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, m::Union{T, AbstractVector{T}}, P::Union{T, AbstractMatrix{T}}) where {T <: Real}
     weights = getweights(method, m, P)
     points  = getpoints(method, m, P)
-    gbar = g(m) - g(m)
+    gbar = zero(g(m))
     foreach(zip(weights, points)) do (weight, point)
-        gbar += weight * g(point)
+        gbar = gbar .+ weight .* g(point)
     end
     return gbar
 end
 
-function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, q::D) where {D <: UnivariateDistribution}
-    return approximate_kernel_expectation(method, g, mean(q), var(q))
-end
-
-function approximate_kernel_expectation(method::GenUnscented, g::Function, q::D) where {D <: UnivariateDistribution}
-    return approximate_expectation(method ,q, g)
-end
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::Real, P::Real) where {K <: Array}
-    weights = getweights(method, m, P)
-    points  = getpoints(method, m, P)
-    gbar .= 0
-    foreach(zip(weights, points)) do (weight, point)
-        gbar .+= weight * g(point)
-    end
-    return gbar
-end
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: UnivariateDistribution}
-    return approximate_kernel_expectation!(gbar, method, g, mean(distribution), var(distribution))
-end
-
-#multivariate case 
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: MultivariateDistribution}
+function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: NormalDistributionsFamily}
     return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
 end
 
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {K <: Array, T <: Real}
+function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::Union{T, AbstractVector{T}}, P::Union{T, AbstractMatrix{T}}) where {K <: Array, T <: Real}
     weights = getweights(method, m, P)
     points  = getpoints(method, m, P)
 
@@ -69,41 +32,6 @@ function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationM
     return gbar
 end
 
-function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {T <: Real}
-    weights = getweights(method, m, P)
-    points  = getpoints(method, m, P)
-
-    gbar = g(m) .* 0.0
-    foreach(zip(weights, points)) do (weight, point)
-        axpy!(weight, g(point), gbar) # gbar = gbar + weight * g(point)
-    end
-    return gbar
-end
-
-
-# multivariate 
-
-function ReactiveMP.prod(::GenericProd, left::MultivariateGaussianDistributionsFamily, right::ContinuousMultivariateLogPdf) 
-    m,v = approximate_meancov(srcubature(),(x) -> exp(right.logpdf(x)),left)
-    if isnan(m[1])
-        return left 
-    else
-        return MvNormalMeanCovariance(m,v)
-    end
-end
-
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: MultivariateDistribution}
-    return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
-end
-
-function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, m::AbstractVector{T}, P::AbstractMatrix{T}) where {K <: Array, T <: Real}
-    weights = getweights(method, m, P)
-    points  = getpoints(method, m, P)
-
-    gbar .= 0
-    foreach(zip(weights, points)) do (weight, point)
-        axpy!(weight, g(point), gbar) # gbar = gbar + weight * g(point)
-    end
-    return gbar
+function approximate_kernel_expectation(method::GenUnscented, g::Function, q::D) where {D <: NormalDistributionsFamily}
+    return approximate_expectation(method, q, g)
 end
