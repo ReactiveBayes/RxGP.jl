@@ -402,7 +402,7 @@ function jdotavx(a::AbstractArray, b::AbstractArray)
     @assert axes(a_flat) == axes(b_flat)
     @assert length(a_flat) == length(b_flat) "dot operands must have same number of elements"
     s = zero(promote_type(eltype(a), eltype(b)))
-    @turbo for i in eachindex(a_flat, b_flat)
+    @turbo warn_check_args=false for i in eachindex(a_flat, b_flat)
         s += a_flat[i] * b_flat[i]
     end
     return s
