@@ -134,8 +134,8 @@ end
     Ψ2_approx = approximate_kernel_expectation(srcubature(),(x) -> kernelmatrix(kernel(θ_val), Xu_2d, [x]) * kernelmatrix(kernel(θ_val), [x], Xu_2d), q_in) + 1e-12*I
     Ψ3 = kron(W_mean, Ψ2_approx)
     Ψ1_tilde = kron(C, Ψ1_approx)
-    gt_mean_v = cholinv(Ψ3) * Ψ1_tilde' * W_mean * μ_y 
-    gt_cov_v = cholinv(Ψ3)
+    gt_mean_v = inv(Ψ3) * Ψ1_tilde' * W_mean * μ_y 
+    gt_cov_v = inv(Ψ3)
     ν_v = @call_rule MultiSGP(:v, Marginalisation) (q_out = q_out, q_in = q_in, q_w = q_w, q_θ = PointMass(θ_val), meta = MultiSGPMeta(method, Xu_2d,[1.0;;],kernelmatrix(kernel(θ_val),Xu_2d,[Xu_2d[1]]),kernelmatrix(kernel(θ_val),Xu_2d,[Xu_2d[1]]) * kernelmatrix(kernel(θ_val),[Xu_2d[1]],Xu_2d) + 1e-12*I,cholinv(kernelmatrix(kernel(θ_val),Xu_2d) + 1e-12*I), kernel, GPCache()))
     @test typeof(ν_v) <: MultivariateGaussianDistributionsFamily
     @test isapprox(mean(ν_v), gt_mean_v; atol = 1e-3)
