@@ -18,6 +18,7 @@ makedocs(;
         "How to use" => [
             "Getting Started" => "getting_started.md",
             "API Reference" => "api_reference.md",
+            "Examples" => ["regression.md","classification.md"],
         ],  
     ],
 )
