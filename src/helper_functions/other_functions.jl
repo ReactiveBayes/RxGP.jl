@@ -39,7 +39,11 @@ function get_Ex(; mean_fn=mean_fn)
         if x isa Number
             return [ForwardDiff.derivative(z -> mean_fn(z), x)]
         elseif x isa AbstractVector
-            return ForwardDiff.gradient(z -> mean_fn(z), x)
+            if length(x) == 1
+                return [ForwardDiff.derivative(z -> mean_fn(z), x[1])]
+            else
+                return ForwardDiff.gradient(z -> mean_fn(z), x)
+            end
         else
             error("Type of x: $(typeof(x)) not supported in Ex")
         end
