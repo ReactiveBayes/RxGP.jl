@@ -101,7 +101,8 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
                 num_SE = div(length(θ), D+1)
                 N = length(Xu)
                 tXT = transpose(hcat(Xu...)' .- x')
-                res = zeros(D, N)
+                T = promote_type(eltype(x), eltype(θ))
+                res = zeros(T, D, N)
                 for i in 1:num_SE
                     wi = StatsFuns.softplus(θ[(i-1)*(D+1)+1])
                     li = StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)])
@@ -155,7 +156,8 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
                 @assert iseven(dim_θ)
                 w = θ[1:div(dim_θ,2)]
                 l = θ[div(dim_θ,2)+1:end]
-                sum = zeros(D,D)
+                T = promote_type(eltype(x), eltype(θ))
+                sum = zeros(T, D, D)
                 for (wi, li) in zip(w, l)
                     Lambda_invi = inv((StatsFuns.softplus.(li) .* Matrix(I,D,D))^2)
                     sum += Lambda_invi * StatsFuns.softplus(wi)
@@ -166,7 +168,8 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
             return (x, θ) -> begin
                 @assert length(θ) % (D+1) == 0
                 num_SE = div(length(θ), D+1)
-                sum = zeros(D, D)
+                T = promote_type(eltype(x), eltype(θ))
+                sum = zeros(T, D, D)
                 for i in 1:num_SE
                     wi = StatsFuns.softplus(θ[(i-1)*(D+1)+1])
                     li = StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)])
