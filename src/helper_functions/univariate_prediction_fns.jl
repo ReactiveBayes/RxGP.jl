@@ -28,7 +28,6 @@ function predict_GP_values(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v
 
     mxu = apply_mean_fn.(meta.Xu, mf)
     Ku_mxu = meta.KuuF \ mxu
-    Kuu_inv = meta.KuuF \ I
     
     mx_ = apply_mean_fn.(m_in, mf)
     kxx = kernelmatrix_diag(kernel(θ), m_in)
@@ -43,7 +42,8 @@ function predict_GP_values(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v
         Ψ1_trans = transpose(Ψ1)
 
         m_f = mx_[i] + dot(Ψ1, (μ_v - Ku_mxu))
-        V_f = (Ψ0 + Ψ1 * (Σ_v - Kuu_inv) * Ψ1_trans)[1]
+        Kuu_inv_Ψ1 = meta.KuuF \ Ψ1_trans
+        V_f = (Ψ0 + Ψ1 * Σ_v * Ψ1_trans - Ψ1 * Kuu_inv_Ψ1)[1]
 
         push!(predictions_mean_, m_f)
         push!(predictions_var_, V_f)
@@ -97,7 +97,8 @@ function predict_GP_gradients(; m_in::AbstractVector{<:AbstractVector{<:Real}}, 
         C = C_[i]
 
         m_g = E + C * (μ_v - Ku_mxu)
-        C_g = D + C * (Σ_v - Kuu_inv) * transpose(C)
+        Kuu_inv_C = meta.KuuF \ transpose(C)
+        C_g = D + C * Σ_v * transpose(C) - C * Kuu_inv_C
 
         push!(predictions_mean_, m_g)
         push!(predictions_cov_, C_g)
@@ -164,11 +165,13 @@ function predict_GP_joints(; m_in::AbstractVector{<:AbstractVector{<:Real}}, q_v
         C = C_[i]
 
         m_f = mx_[i] + dot(Ψ1, (μ_v - Ku_mxu))
-        V_f = (Ψ0 + Ψ1 * (Σ_v - Kuu_inv) * Ψ1_trans)[1]
+        Kuu_inv_Ψ1 = meta.KuuF \ Ψ1_trans
+        V_f = (Ψ0 + Ψ1 * Σ_v * Ψ1_trans - Ψ1 * Kuu_inv_Ψ1)[1]
 
         m_g = E + C * (μ_v - Ku_mxu)
-        C_g = D + C * (Σ_v - Kuu_inv) * transpose(C)
-        C_fg = 2 * F + 2 * Ψ1 * (Σ_v - Kuu_inv) * transpose(C)
+        Kuu_inv_C = meta.KuuF \ transpose(C)
+        C_g = D + C * Σ_v * transpose(C) - C * Kuu_inv_C
+        C_fg = 2 * F + 2 * Ψ1 * Σ_v * transpose(C) - 2 * Ψ1 * Kuu_inv_C
         C_gf = transpose(C_fg)
 
         m_j = [m_f; m_g]
