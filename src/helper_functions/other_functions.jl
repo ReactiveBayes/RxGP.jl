@@ -1,6 +1,9 @@
 export jdotavx, create_blockmatrix
 export get_Ex, get_Cxθ_Xu, get_Dxθ, get_Fxθ, get_UniSGPMeta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
 
+# Keep kernel params strictly positive while preserving AD stability.
+softplus_pos(x) = StatsFuns.softplus(x) + eps(Float64)
+
 
 # ======= Single source of meta information ======= #
 function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
@@ -70,14 +73,14 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
         # Analytic approach (for SE/SEn kernel only) ~ 10x faster than AutoDiff
         if kernel_spec == :SE && !independent_SE_lengthscales
             return (x, θ, Xu) -> begin
-                Lambda_inv = 1/(StatsFuns.softplus.(θ[2])^2) * Matrix(I,D,D)
+                Lambda_inv = 1/(softplus_pos.(θ[2])^2) * Matrix(I,D,D)
                 tX = hcat(Xu...)' .- x'
                 Kxu = kernelmatrix(kernel(θ), [x], Xu)
                 return (transpose(Lambda_inv) * transpose(tX)) .* Kxu
             end
         elseif kernel_spec == :SE && independent_SE_lengthscales
             return (x, θ, Xu) -> begin
-                Lambda_inv = inv((StatsFuns.softplus.(θ[2:end]) .* Matrix(I,D,D))^2)
+                Lambda_inv = inv((softplus_pos.(θ[2:end]) .* Matrix(I,D,D))^2)
                 tX = hcat(Xu...)' .- x'
                 Kxu = kernelmatrix(kernel(θ), [x], Xu)
                 return (transpose(Lambda_inv) * transpose(tX)) .* Kxu
@@ -90,9 +93,9 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
                 w_ = θ[1:div(dim_θ,2)]
                 l_ = θ[div(dim_θ,2)+1:end]
                 tXT = transpose(hcat(Xu...)' .- x')
-                k = (w, l) -> StatsFuns.softplus(w) * with_lengthscale(SEKernel(), StatsFuns.softplus(l))
+                k = (w, l) -> softplus_pos(w) * with_lengthscale(SEKernel(), softplus_pos(l))
                 Kxu = (w, l) -> kernelmatrix(k(w,l), [x], Xu)
-                Lambda_inv_T = (l) -> transpose(inv((StatsFuns.softplus.(l) .* Matrix(I,D,D))^2))
+                Lambda_inv_T = (l) -> transpose(inv((softplus_pos.(l) .* Matrix(I,D,D))^2))
                 return sum((Lambda_inv_T(l) * tXT) .* Kxu(w,l) for (w,l) in zip(w_,l_))
             end
         elseif kernel_spec == :SEn && independent_SE_lengthscales
@@ -104,8 +107,8 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
                 T = promote_type(eltype(x), eltype(θ))
                 res = zeros(T, D, N)
                 for i in 1:num_SE
-                    wi = StatsFuns.softplus(θ[(i-1)*(D+1)+1])
-                    li = StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)])
+                    wi = softplus_pos(θ[(i-1)*(D+1)+1])
+                    li = softplus_pos.(θ[(i-1)*(D+1)+2 : i*(D+1)])
                     Λinv = Diagonal(1 ./ li.^2)
                     Ki = kernelmatrix(
                         wi * with_lengthscale(SEKernel(), li),
@@ -142,13 +145,13 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
         # Analytic approach (for SE/SEn kernel only) ~ 10x faster than AutoDiff
         if kernel_spec == :SE && !independent_SE_lengthscales
             return (x, θ) -> begin
-                Lambda_inv = 1/(StatsFuns.softplus.(θ[2])^2) * Matrix(I,D,D)
-                return Lambda_inv * StatsFuns.softplus(θ[1])
+                Lambda_inv = 1/(softplus_pos.(θ[2])^2) * Matrix(I,D,D)
+                return Lambda_inv * softplus_pos(θ[1])
             end
         elseif kernel_spec == :SE && independent_SE_lengthscales
             return (x, θ) -> begin
-                Lambda_inv = inv((StatsFuns.softplus.(θ[2:end]) .* Matrix(I,D,D))^2)
-                return Lambda_inv * StatsFuns.softplus(θ[1])
+                Lambda_inv = inv((softplus_pos.(θ[2:end]) .* Matrix(I,D,D))^2)
+                return Lambda_inv * softplus_pos(θ[1])
             end
         elseif kernel_spec == :SEn && !independent_SE_lengthscales
             return (x, θ) -> begin
@@ -159,8 +162,8 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
                 T = promote_type(eltype(x), eltype(θ))
                 sum = zeros(T, D, D)
                 for (wi, li) in zip(w, l)
-                    Lambda_invi = inv((StatsFuns.softplus.(li) .* Matrix(I,D,D))^2)
-                    sum += Lambda_invi * StatsFuns.softplus(wi)
+                    Lambda_invi = inv((softplus_pos.(li) .* Matrix(I,D,D))^2)
+                    sum += Lambda_invi * softplus_pos(wi)
                 end
                 return sum
             end
@@ -171,8 +174,8 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
                 T = promote_type(eltype(x), eltype(θ))
                 sum = zeros(T, D, D)
                 for i in 1:num_SE
-                    wi = StatsFuns.softplus(θ[(i-1)*(D+1)+1])
-                    li = StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)])
+                    wi = softplus_pos(θ[(i-1)*(D+1)+1])
+                    li = softplus_pos.(θ[(i-1)*(D+1)+2 : i*(D+1)])
                     Λinv = Diagonal(1 ./ li.^2)
                     sum .+= wi * Λinv
                 end
@@ -241,7 +244,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         SE = independent_SE_lengthscales ? D + 1 : 2 # number of params (1 weight + D lengthscales or 1 shared lengthscale)
         dim_θ = SE; # number of kernel parameters
         θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)));
-        kernel = (θ) -> StatsFuns.softplus(θ[1]) * with_lengthscale(SEKernel(),StatsFuns.softplus.(θ[2:SE]))
+        kernel = (θ) -> softplus_pos(θ[1]) * with_lengthscale(SEKernel(), softplus_pos.(θ[2:SE]))
         return kernel, θ_init, dim_θ
 
     elseif kernel_spec == :SEn && !independent_SE_lengthscales
@@ -254,7 +257,7 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         kernel = (θ) -> begin 
             w = θ[1:half_dim_θ];
             l = θ[half_dim_θ+1:end];
-            kernel_i = (wi, li) -> StatsFuns.softplus(wi) * with_lengthscale(SEKernel(), StatsFuns.softplus(li))
+            kernel_i = (wi, li) -> softplus_pos(wi) * with_lengthscale(SEKernel(), softplus_pos(li))
             kernels = []
             for (wi, li) in zip(w,l)
                 push!(kernels, kernel_i(wi, li))
@@ -269,8 +272,8 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)))
         kernel = (θ) -> begin
             kernels = [
-                StatsFuns.softplus(θ[(i-1)*(D+1)+1]) *
-                with_lengthscale(SEKernel(), StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)]))
+                softplus_pos(θ[(i-1)*(D+1)+1]) *
+                with_lengthscale(SEKernel(), softplus_pos.(θ[(i-1)*(D+1)+2 : i*(D+1)]))
                 for i in 1:num_SE
             ]
             return KernelSum(kernels)
@@ -284,9 +287,9 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         θ_init = StatsFuns.invsoftplus.(ones(dim_θ) .+ collect(range(-0.05, 0.05, length=dim_θ)))
         # Spectral mixture with num_SM components
         kernel_SM = (θ) -> begin
-            weights = StatsFuns.softplus.(θ[1:num_SM])
-            covariance = reshape(StatsFuns.softplus.(θ[num_SM+1 : num_SM + D*num_SM]), (D, num_SM))
-            means = reshape(StatsFuns.softplus.(θ[num_SM + D*num_SM + 1:end]), (D, num_SM))
+            weights = softplus_pos.(θ[1:num_SM])
+            covariance = reshape(softplus_pos.(θ[num_SM+1 : num_SM + D*num_SM]), (D, num_SM))
+            means = reshape(softplus_pos.(θ[num_SM + D*num_SM + 1:end]), (D, num_SM))
             KernelFunctions.spectral_mixture_kernel(weights, covariance, means)
         end
         kernel = (θ) -> kernel_SM(θ)
@@ -303,14 +306,14 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
         kernel_SE = (θ) -> begin
             if !independent_SE_lengthscales
                 kernels = [
-                    StatsFuns.softplus(θ[2i-1]) * with_lengthscale(SEKernel(), StatsFuns.softplus(θ[2i]))
+                    softplus_pos(θ[2i-1]) * with_lengthscale(SEKernel(), softplus_pos(θ[2i]))
                     for i in 1:num_SE
                 ]
                 return KernelSum(kernels)
             else
                 kernels = [
-                    StatsFuns.softplus(θ[(i-1)*(D+1)+1]) *
-                    with_lengthscale(SEKernel(), StatsFuns.softplus.(θ[(i-1)*(D+1)+2 : i*(D+1)]))
+                    softplus_pos(θ[(i-1)*(D+1)+1]) *
+                    with_lengthscale(SEKernel(), softplus_pos.(θ[(i-1)*(D+1)+2 : i*(D+1)]))
                     for i in 1:num_SE
                 ]
                 return KernelSum(kernels)
@@ -319,9 +322,9 @@ function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1,
 
         # Spectral mixture with num_SM components
         kernel_SM = (θ) -> begin
-            weights = StatsFuns.softplus.(θ[1:num_SM])
-            covariance = reshape(StatsFuns.softplus.(θ[num_SM+1 : num_SM + D*num_SM]), (D, num_SM))
-            means = reshape(StatsFuns.softplus.(θ[num_SM + D*num_SM + 1:end]), (D, num_SM))
+            weights = softplus_pos.(θ[1:num_SM])
+            covariance = reshape(softplus_pos.(θ[num_SM+1 : num_SM + D*num_SM]), (D, num_SM))
+            means = reshape(softplus_pos.(θ[num_SM + D*num_SM + 1:end]), (D, num_SM))
             KernelFunctions.spectral_mixture_kernel(weights, covariance, means)
         end
 
