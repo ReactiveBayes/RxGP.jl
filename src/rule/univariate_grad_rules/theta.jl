@@ -24,7 +24,7 @@
         Ω1 = (θ) -> Cxθ_Xu(μ_in, θ, meta.Xu)
         Ω2 = (θ) -> transpose(Ω1(θ)) * Ω1(θ)
         Ω3 = (θ) -> transpose(Ω1(θ)) * Wg_bar * Ω1(θ)
-        Ω4 = (θ) -> transpose(Ex) * Wg_bar * Ω1(θ)
+        Ω4 = (θ) -> transpose(Ex(μ_in)) * Wg_bar * Ω1(θ)
     end
 
 
