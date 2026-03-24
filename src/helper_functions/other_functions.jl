@@ -6,11 +6,11 @@ softplus_pos(x) = StatsFuns.softplus(x) + eps(Float64)
 
 
 # ======= Single source of meta information ======= #
-function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ)
+function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ, Cxθ_Xu=nothing, Dxθ=nothing, Ex=nothing, Fxθ=nothing)
     θ = typeof(θ) <: PointMass ? mean(θ) : θ
     dims_theta = length(θ)
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
-    KuuF = fastcholesky(Kuu)
+    KuuF = cholesky(Kuu)
     x_dummy = zeros(D)
     Ψx = 0.0
     Ψxx = 0.0
@@ -21,10 +21,10 @@ function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, i
     Uv = zeros(size(Xu,1), size(Xu,1))
 
     @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
-    Ex = get_Ex(;mean_fn=mean_fn)
-    Fxθ = get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode)
-    Dxθ = get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    Cxθ_Xu = get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
+    Ex = Ex===nothing ? get_Ex(;mean_fn=mean_fn) : Ex
+    Fxθ = Fxθ===nothing ? get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode) : Fxθ
+    Dxθ = Dxθ===nothing ? get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales) : Dxθ
+    Cxθ_Xu = Cxθ_Xu===nothing ? get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales) : Cxθ_Xu
 
     return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
 end
