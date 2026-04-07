@@ -1,14 +1,14 @@
 # This file defines the Sparse Gaussian Process (SGP) node for univariate case
 # In particular, y = f(x), where y ∈ ℝ is a scalar, and x ∈ ℝᴰ
 
-export UniSGP_Grad
+export UniSGP_dID
 
-struct UniSGP_Grad end 
+struct UniSGP_dID end 
 
-@node UniSGP_Grad Stochastic [ out, in, v , Wg, θ] # out: output, in: input,  v: transformed-inducing points Kuu_inv * u , Wg: precision of process noise 
+@node UniSGP_dID Stochastic [ out, in, v , Wg, θ] # out: output, in: input,  v: transformed-inducing points Kuu_inv * u , Wg: precision of process noise 
 
 #---- Define average energy ----#
-@average_energy UniSGP_Grad (q_out::IN_OUT, q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_Wg::NOISE_Wg, q_θ::PointMass, meta::UniSGPMeta,) = begin
+@average_energy UniSGP_dID (q_out::IN_OUT, q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_Wg::NOISE_Wg, q_θ::PointMass, meta::UniSGPMeta,) = begin
     θ = mean(q_θ)
     μ_ω, Σ_ω = mean_cov_vector_matrix(q_out)
     μ_in, Σ_in = mean_cov_vector_matrix(q_in)
@@ -20,28 +20,28 @@ struct UniSGP_Grad end
     Ku_mxu = meta.KuuF \ mxu
     D = length(μ_ω)
     Rv = μ_v * transpose(μ_v) + Σ_v
-    Ex = getEx(meta)
-    Dxθ = getDxθ(meta)
-    Cxθ_Xu = getCxθ_Xu(meta)
+    Lm_fn = getLm_fn(meta)
+    Kxx_fn = getKxx_fn(meta)
+    Kxu_fn = getKxu_fn(meta)
 
     if q_in isa Distribution
-        Ωx = approximate_kernel_expectation(meta.method, (x) -> Ex(x), q_in)
-        Ω0 = approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ), q_in)
-        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in)
-        Ω2 = approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Cxθ_Xu(x, θ, meta.Xu), q_in)
-        Ω5 = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ex(x)), q_in)
-        Ω6 = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(μ_v) * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
-        Ω7 = approximate_kernel_expectation(meta.method, (x) -> Ex(x) * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
-        Ω8 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * μ_v * transpose(Ex(x)), q_in)
-        Ω9 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * Rv * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
-        Ω10 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * μ_v * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
-        Ω11 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * Ku_mxu * transpose(Ex(x)), q_in)
-        Ω12 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * Ku_mxu * transpose(μ_v) * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
-        Ω13 = approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu) * Ku_mxu * transpose(Ku_mxu) * transpose(Cxθ_Xu(x, θ, meta.Xu)), q_in)
+        Ωx = approximate_kernel_expectation(meta.method, (x) -> Lm_fn(x), q_in)
+        Ω0 = approximate_kernel_expectation(meta.method, (x) -> Kxx_fn(x, θ), q_in)
+        Ω1 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu), q_in)
+        Ω2 = approximate_kernel_expectation(meta.method, (x) -> transpose(Kxu_fn(x, θ, meta.Xu))*Kxu_fn(x, θ, meta.Xu), q_in)
+        Ω5 = approximate_kernel_expectation(meta.method, (x) -> Lm_fn(x) * transpose(Lm_fn(x)), q_in)
+        Ω6 = approximate_kernel_expectation(meta.method, (x) -> Lm_fn(x) * transpose(μ_v) * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
+        Ω7 = approximate_kernel_expectation(meta.method, (x) -> Lm_fn(x) * transpose(Ku_mxu) * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
+        Ω8 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * μ_v * transpose(Lm_fn(x)), q_in)
+        Ω9 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * Rv * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
+        Ω10 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * μ_v * transpose(Ku_mxu) * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
+        Ω11 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * Ku_mxu * transpose(Lm_fn(x)), q_in)
+        Ω12 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * Ku_mxu * transpose(μ_v) * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
+        Ω13 = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu) * Ku_mxu * transpose(Ku_mxu) * transpose(Kxu_fn(x, θ, meta.Xu)), q_in)
     else
-        Ωx = Ex(μ_in)
-        Ω0 = Dxθ(μ_in, θ)
-        Ω1 = Cxθ_Xu(μ_in, θ, meta.Xu)
+        Ωx = Lm_fn(μ_in)
+        Ω0 = Kxx_fn(μ_in, θ)
+        Ω1 = Kxu_fn(μ_in, θ, meta.Xu)
         Ω2 = transpose(Ω1) * Ω1
         Ω5 = Ωx * transpose(Ωx)
         Ω6 = Ωx * transpose(μ_v) * transpose(Ω1)

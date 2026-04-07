@@ -1,44 +1,17 @@
 export jdotavx, create_blockmatrix
-export get_Ex, get_Cxθ_Xu, get_Dxθ, get_Fxθ, get_UniSGPMeta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
+export get_gradient_Kxu_fn, get_gradient_Kxx_fn, get_UniSGPMeta, get_simple_kernel_and_params, apply_mean_fn, mean_cov_scalar_matrix, mean_cov_vector_matrix
 
 # Keep kernel params strictly positive while preserving AD stability.
 softplus_pos(x) = StatsFuns.softplus(x) + eps(Float64)
 
 
-# ======= Single source of meta information ======= #
-function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec, mode, independent_SE_lengthscales::Bool=true, Xu, θ, Cxθ_Xu=nothing, Dxθ=nothing, Ex=nothing, Fxθ=nothing)
-    θ = typeof(θ) <: PointMass ? mean(θ) : θ
-    dims_theta = length(θ)
-    Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
-    KuuF = cholesky(Kuu)
-    x_dummy = zeros(D)
-    Ψx = 0.0
-    Ψxx = 0.0
-    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
-    Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
-    Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu);
-    Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
-    Uv = zeros(size(Xu,1), size(Xu,1))
-
-    @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn and :SEn_SMn, mode must be :AD. For :SE and :SEn mode can be :AD or :AN"
-    Ex = Ex===nothing ? get_Ex(;mean_fn=mean_fn) : Ex
-    Fxθ = Fxθ===nothing ? get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode) : Fxθ
-    Dxθ = Dxθ===nothing ? get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales) : Dxθ
-    Cxθ_Xu = Cxθ_Xu===nothing ? get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales) : Cxθ_Xu
-
-    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Ex, Fxθ, Dxθ, Cxθ_Xu, KuuF, kernel, D, dims_theta, Uv, 0, 1)
-end
-
-
-# # ======= Kernel and Mean-Function Diff Functions - GENERAL ======= #
-# Gradient of mean function w.r.t x (vector version)
-function get_Ex(; mean_fn=mean_fn)
+# ======= Build operator-specific kernel and mean functions ======= #
+# Private helper: gradient of m(x) w.r.t. x, returns a P-vector.
+function _build_mean_gradient_fn(mean_fn)
     return (x) -> begin
-        # Pre-process x
         if x isa Distribution
             x = mean(x)
         end
-        # Compute gradient
         if x isa Number
             return [ForwardDiff.derivative(z -> mean_fn(z), x)]
         elseif x isa AbstractVector
@@ -48,13 +21,103 @@ function get_Ex(; mean_fn=mean_fn)
                 return ForwardDiff.gradient(z -> mean_fn(z), x)
             end
         else
-            error("Type of x: $(typeof(x)) not supported in Ex")
+            error("Type of x: $(typeof(x)) not supported in _build_mean_gradient_fn")
         end
     end
 end
 
-# Gradient of k(x, Xu_j) w.r.t x
-function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
+# Build the three operator functions (Lm_fn, Kxu_fn, Kxx_fn) for a given linear operator.
+# operator :fn              — identity operator (P=1)
+# operator :grad            — gradient operator (P=D)
+# operator :joint_fn_grad   — stacked identity+gradient (P=1+D)
+function _build_operator_fns(D; mean_fn, kernel, kernel_spec, mode, operator::Symbol, independent_SE_lengthscales::Bool)
+    if operator == :fn
+        # Identity operator: ϕ̃(s) collapses to the standard scalar/vector VSGP observation model.
+        Lm_fn  = (x) -> [apply_mean_fn(x, mean_fn)]
+        Kxu_fn = (x, θ, Xu) -> kernelmatrix(kernel(θ), [x], Xu)    # 1×M
+        Kxx_fn = (x, θ) -> kernelmatrix(kernel(θ), [x], [x])        # 1×1
+        return Lm_fn, Kxu_fn, Kxx_fn, 1
+
+    elseif operator == :grad
+        # Gradient operator ℒ = ∇_x gives P=D dimensional observations.
+        @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn/:SEn_SMn mode must be :AD; for :SE/:SEn mode can be :AD or :AN"
+        Lm_fn  = _build_mean_gradient_fn(mean_fn)
+        Kxu_fn = get_gradient_Kxu_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
+        Kxx_fn = get_gradient_Kxx_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
+        return Lm_fn, Kxu_fn, Kxx_fn, D
+
+    elseif operator == :joint_fn_grad
+        # Stacked operator ℒ = [I; ∇_x]^T gives P = 1+D dimensional observations.
+        # Kxu_fn and Kxx_fn for the joint case always use AD (no analytic shortcut for the cross-block).
+        @assert (mode == :AD && kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn)) || (mode == :AN && kernel_spec in (:SE, :SEn)) "For kernel_spec :SMn/:SEn_SMn mode must be :AD; for :SE/:SEn mode can be :AD or :AN"
+        grad_m   = _build_mean_gradient_fn(mean_fn)
+        grad_Kxu = get_gradient_Kxu_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=:AD, independent_SE_lengthscales=independent_SE_lengthscales)
+        grad_Kxx = get_gradient_Kxx_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=:AD, independent_SE_lengthscales=independent_SE_lengthscales)
+
+        Lm_fn = (x) -> vcat([apply_mean_fn(x, mean_fn)], grad_m(x))  # (1+D)-vector
+
+        Kxu_fn = (x, θ, Xu) -> begin
+            scalar_row = kernelmatrix(kernel(θ), [x], Xu)  # 1×M
+            grad_rows  = grad_Kxu(x, θ, Xu)               # D×M
+            vcat(scalar_row, grad_rows)                     # (1+D)×M
+        end
+
+        # ϕ̃ kernel covariance: full (1+D)×(1+D) block matrix = ℒ_1 ℒ_2 k(x,x)
+        Kxx_fn = (x, θ) -> begin
+            f = (x1, x2) -> kernelmatrix(kernel(θ), [x1], [x2])[1]
+            kxx_val  = f(x, x)                                                  # scalar
+            kxx_fwd  = kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn) ? zeros(1, D) : reshape(ForwardDiff.gradient(z -> f(x, z), x), 1, D)  # 1×D  (∇_{x'} k(x,x)=0 for stationary kernels)
+            kxx_bwd  = kernel_spec in (:SE, :SEn, :SMn, :SEn_SMn) ? zeros(D, 1) : reshape(ForwardDiff.gradient(z -> f(z, x), x), D, 1)  # D×1  (∇_x k(x,x)=0 for stationary kernels)
+            kxx_hess = grad_Kxx(x, θ)                                           # D×D  (∇_x∇_{x'} k)
+            vcat(hcat(kxx_val, kxx_fwd), hcat(kxx_bwd, kxx_hess))               # (1+D)×(1+D)
+        end
+
+        return Lm_fn, Kxu_fn, Kxx_fn, 1 + D
+    else
+        error("operator must be :fn, :grad, or :joint_fn_grad. Got: $operator")
+    end
+end
+
+# ======= Single source of meta information ======= #
+# operator — :fn (default), :grad, or :joint_fn_grad (see _build_operator_fns above).
+# Custom Lm_fn / Kxu_fn / Kxx_fn can be provided to use an arbitrary linear operator;
+# if any are given manually all three must be provided.
+function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD,
+                         operator::Symbol=:fn,
+                         independent_SE_lengthscales::Bool=true, Xu, θ,
+                         Lm_fn=nothing, Kxu_fn=nothing, Kxx_fn=nothing)
+    θ = typeof(θ) <: PointMass ? mean(θ) : θ
+    dims_theta = length(θ)
+    Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
+    KuuF = cholesky(Kuu)
+    x_dummy = zeros(D)
+    Ψx = 0.0
+    Ψxx = 0.0
+    Ψ0 = kernelmatrix(kernel(θ), [x_dummy])[1]
+    Ψ1_trans = kernelmatrix(kernel(θ), Xu, [x_dummy])
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [x_dummy]) * kernelmatrix(kernel(θ), [x_dummy], Xu)
+    Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
+    Uv = zeros(size(Xu, 1), size(Xu, 1))
+
+    if Lm_fn === nothing || Kxu_fn === nothing || Kxx_fn === nothing
+        (Lm_fn_default, Kxu_fn_default, Kxx_fn_default, dims_data) =
+            _build_operator_fns(D; mean_fn=mean_fn, kernel=kernel, kernel_spec=kernel_spec,
+                                mode=mode, operator=operator, independent_SE_lengthscales=independent_SE_lengthscales)
+        Lm_fn  = Lm_fn  === nothing ? Lm_fn_default  : Lm_fn
+        Kxu_fn = Kxu_fn === nothing ? Kxu_fn_default : Kxu_fn
+        Kxx_fn = Kxx_fn === nothing ? Kxx_fn_default : Kxx_fn
+    else
+        # All three provided manually — infer dims_data from a test call
+        dims_data = length(Lm_fn(x_dummy))
+    end
+
+    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Lm_fn, Kxx_fn, Kxu_fn, KuuF, kernel, dims_data, dims_theta, Uv, 0, 1)
+end
+
+
+# # ======= Kernel and Mean-Function Diff Functions - GENERAL ======= #
+# Gradient of k(x, Xu_j) w.r.t x — produces K̃_xu(x,θ) ∈ ℝ^{D×M} for the gradient operator.
+function get_gradient_Kxu_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
     if mode == :AD
         # AutoDiff approach
         return (x, θ, Xu) -> begin
@@ -63,7 +126,7 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
             f = (x1, x2) -> kernelmatrix(kernel(θ), [x1], [x2])[1]
             res = [ForwardDiff.gradient(z -> f(Xu[j], z), x)[i] for i in 1:D, j in 1:N]
             if any(isnan, res)
-                @warn "NaN encountered in Cxθ_Xu_K, returning Cxθ_Xu_K with spread points" maxlog=1
+                @warn "NaN encountered in gradient_Kxu_fn, returning gradient_Kxu_fn with spread points" maxlog=1
                 return [ForwardDiff.gradient(z -> f(Xu[j] .- 5e-7, z), x .+ 5e-7)[i] for i in 1:D, j in 1:N]
             end
             return res
@@ -119,15 +182,15 @@ function get_Cxθ_Xu(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbo
                 return res
             end
         else
-            error("Currently only SE and SE2 kernels supported for analytic Cxθ_Xu_K")
+            error("Currently only SE and SE2 kernels supported for analytic gradient_Kxu_fn")
         end
     else
         error("mode must be :AD (AutoDiff) or :AN (Analytic)")
     end
 end
 
-# Second derivative / Hessian of k(x, x) w.r.t x
-function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
+# Hessian of k(x, x) w.r.t x — produces K̃_xx(x,θ) ∈ ℝ^{D×D} for the gradient operator.
+function get_gradient_Kxx_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
     if mode == :AD
         # AutoDiff approach
         return (x, θ) -> begin
@@ -135,7 +198,7 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
             g = (x1, x2) -> ForwardDiff.gradient(z -> f(z, x2), x1)
             res = ForwardDiff.jacobian(z -> g(x, z), x)
             if any(isnan, res)
-                @warn "NaN encountered in Dxθ_K_obj, returning Dxθ_K_obj with spread points" maxlog=1
+                @warn "NaN encountered in gradient_Kxx_fn, returning gradient_Kxx_fn with spread points" maxlog=1
                 return ForwardDiff.jacobian(z -> g(x .- 5e-7, z), x .+ 5e-7)
             end
             return res
@@ -182,41 +245,12 @@ function get_Dxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:
                 return sum
             end
         else
-            error("Currently only SE and SEn kernels supported for analytic Dxθ_K_obj")
+            error("Currently only SE and SEn kernels supported for analytic gradient_Kxx_fn")
         end
     else
         error("mode must be :AD (AutoDiff) or :AN (Analytic)")
     end
 end
-
-# Gradient of k(x, x) w.r.t second argument (vector version)
-function get_Fxθ(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD)
-    if mode == :AD
-        # AutoDiff approach
-        return (x, θ) -> begin
-            f = (x1, x2) -> kernelmatrix(kernel(θ), [x1], [x2])[1]
-            res = ForwardDiff.gradient(z -> f(x, z), x)
-            if any(isnan, res)
-                @warn "NaN encountered in Fxθ_K_obj, returning small value(s)" maxlog=1
-                return zeros(1, D)
-            end
-            return reshape(res, (1, D))
-        end
-
-    elseif mode == :AN
-        # Analytic approach (for SE/SEn kernel only) ~ 10x faster than AutoDiff
-        if kernel_spec == :SE
-            return (x, θ) -> zeros(1, D)
-        elseif kernel_spec == :SEn
-            return (x, θ) -> zeros(1, D)
-        else
-            error("Currently only SE and SEn kernels supported for analytic Fxθ_K_obj")
-        end
-    else
-        error("mode must be :AD (AutoDiff) or :AN (Analytic)")
-    end
-end
-
 
 # # ================== Simple KernelFunctions.jl Kernel Builder (dimension-agnostic) ================== #
 function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1, num_SM::Int=1, independent_SE_lengthscales::Bool=true)
