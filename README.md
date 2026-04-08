@@ -31,52 +31,80 @@ Pkg.develop(path="path/to/RxGP.jl")
 
 ## Quick Start
 
-A minimal GP regression with function-value and gradient observations:
+Minimal GP regression with an EM loop for hyperparameter optimisation:
 
 ```julia
-using RxInfer, RxGP
-using KernelFunctions
+using RxInfer, RxGP, BayesBase
+using KernelFunctions, LinearAlgebra, Flux
 
 # --- Data ---
 N  = 30
-Xu = [[x] for x in range(-4, 4; length=20)]  # inducing inputs
-xtrain = [rand() * 8 - 4 for _ in 1:N]       # training inputs
-ytrain = sinc.(xtrain) + 0.05 * randn(N)      # noisy observations
+Nu = 20
+Xu = [[x] for x in range(-4, 4; length=Nu)]      # inducing inputs
+xtrain = sort(rand(N) .* 8 .- 4)                  # training inputs
+ytrain = sinc.(xtrain) .+ 0.05 .* randn(N)        # noisy observations
 
-# --- Kernel & meta ---
+# --- Kernel ---
 D = 1
 mean_fn = (x) -> 0.0
 kernel, θ_init, _ = get_simple_kernel_and_params(D; kernel_spec=:SE)
-meta = get_UniSGPMeta(D;
-    method   = ghcubature(21),
-    mean_fn  = mean_fn,
-    kernel   = kernel,
-    operator = :fn,          # :fn | :grad | :joint_fn_grad
-    Xu       = Xu,
-    θ        = θ_init,
-)
 
-# --- Model ---
-@model function gp_regression(y, x, Xu, θ)
-    v ~ MvNormalWeightedMeanPrecision(zeros(length(Xu)), 50 * diageye(length(Xu)))
-    w ~ GammaShapeRate(1e-2, 1e-2)
+# --- Model (priors passed as arguments for EM warm-starting) ---
+@model function gp_regression(y, x, Xu, θ, mv_prior, gamma_prior)
+    v ~ mv_prior
+    w ~ gamma_prior
     for i in eachindex(y)
         y[i] ~ UniSGP(x[i], v, w, θ)
     end
 end
 
-# --- Inference ---
-result = infer(
-    model       = gp_regression(Xu=Xu, θ=θ_init),
-    data        = (y=ytrain, x=[[x] for x in xtrain]),
-    meta        = meta,
-    iterations  = 10,
-    free_energy = true,
-)
+@meta function gpr_meta(; Xu, θ)
+    UniSGP() -> get_UniSGPMeta(D; mean_fn=mean_fn, kernel=kernel, operator=:fn, Xu=Xu, θ=θ)
+end
+
+@initialization function gpr_init(q_v_init, q_w_init)
+    q(v) = q_v_init
+    q(w) = q_w_init
+end
+
+gpr_constraints = @constraints begin
+    q(v, w) = q(v)q(w)
+end
+
+# --- EM loop ---
+θ_opt = deepcopy(θ_init)
+q_v   = MvNormalWeightedMeanPrecision(zeros(Nu), 50 * diageye(Nu))
+q_w   = GammaShapeRate(1e-2, 1e-2)
+state = Flux.setup(Flux.AdaMax(0.01), θ_opt)
+grad  = similar(θ_opt)
+
+for run in 1:15
+    # E-step: VMP inference, seeded from the previous posterior
+    res = infer(
+        model          = gp_regression(Xu=Xu, θ=θ_opt, mv_prior=q_v, gamma_prior=q_w),
+        data           = (y=ytrain, x=[[x] for x in xtrain]),
+        meta           = gpr_meta(Xu=Xu, θ=θ_opt),
+        initialization = gpr_init(q_v, q_w),
+        constraints    = gpr_constraints,
+        returnvars     = KeepLast(),
+        iterations     = 2,
+        free_energy    = true,
+    )
+    q_v, q_w = res.posteriors[:v], res.posteriors[:w]
+
+    # M-step: gradient update of kernel hyperparameters
+    for _ in 1:10
+        grad_llh_default!(grad, θ_opt;
+            y_data=ytrain, x_y_data=[[x] for x in xtrain], x_ω_data=[[x] for x in xtrain],
+            q_v=q_v, q_w=q_w, kernel=kernel, mean_fn=mean_fn, Xu=Xu)
+        Flux.Optimise.update!(state, θ_opt, grad)
+    end
+end
 
 # --- Predict ---
 xtest = [[x] for x in range(-6, 6; length=200)]
-means, covs = predict_GP(m_in=xtest, q_v=result.posteriors[:v], q_θ=θ_init, meta=meta)
+meta_fn = get_UniSGPMeta(D; mean_fn=mean_fn, kernel=kernel, operator=:fn, Xu=Xu, θ=θ_opt)
+means, covs = predict_GP(m_in=xtest, q_v=q_v, q_θ=θ_opt, meta=meta_fn)
 ```
 
 To add **gradient observations**, use `UniSGP_dID` with `operator = :grad` and a Wishart noise prior — see the [full example in the docs](https://ReactiveBayes.github.io/RxGP.jl/stable/examples/usage/).
