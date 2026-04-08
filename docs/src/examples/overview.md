@@ -35,9 +35,10 @@ GP regression that incorporates **derivative observations** alongside function-v
 - Hyperparameter optimisation via gradient-based methods
 
 !!! tip
-    To run the notebooks, activate the `examples/` project environment:
+    To run the notebooks, clone the repository and open them with Jupyter or VS Code.
+    The notebooks use the root project environment — activate and instantiate it once:
     ```julia
     using Pkg
-    Pkg.activate("examples")
+    Pkg.activate(".")
     Pkg.instantiate()
     ```

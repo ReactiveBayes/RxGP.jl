@@ -88,7 +88,7 @@ Construct a [`UniSGPMeta`](@ref) for input dimension `D`. This is the recommende
 or `:joint_fn_grad` (stacked, P=1+D). Custom operator functions `Lm_fn`, `Kxu_fn`, `Kxx_fn`
 can be provided to override the default.
 """
-function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD,
+function get_UniSGPMeta(D; method=ghcubature(21), mean_fn, kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD,
                          operator::Symbol=:fn,
                          independent_SE_lengthscales::Bool=true, Xu, θ,
                          Lm_fn=nothing, Kxu_fn=nothing, Kxx_fn=nothing)

@@ -35,7 +35,10 @@ makedocs(;
             "Helper utilities"        => "library/helpers.md",
             "Type aliases"            => "library/types.md",
         ],
-        "Examples" => "examples/overview.md",
+        "Examples" => [
+            "Notebook examples" => "examples/overview.md",
+            "Usage walkthrough"  => "examples/usage.md",
+        ],
         "Contributing" => "contributing/guide.md",
     ],
 )
