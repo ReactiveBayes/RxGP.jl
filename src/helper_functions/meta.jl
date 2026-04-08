@@ -89,13 +89,19 @@ mutable struct MultiSGPMeta{I,K}
     kernel      :: K
     GPCache     :: Union{Nothing,GPCache}
 end
+"""Return the inducing input locations ``\\mathbf{X}_u``."""
 getInducingInput(meta::MultiSGPMeta) = meta.Xu
+"""Return the cached kernel expectation ``\\Psi_0``."""
 getΨ0(meta::MultiSGPMeta) = meta.Ψ0 
+"""Return the cached transposed cross-kernel expectation ``\\Psi_1^\\top``."""
 getΨ1_trans(meta::MultiSGPMeta) = meta.Ψ1_trans
+"""Return the cached quadratic kernel expectation ``\\Psi_2``."""
 getΨ2(meta::MultiSGPMeta) = meta.Ψ2
 """Return the precomputed ``K_{uu}^{-1}`` matrix."""
 getKuuInverse(meta::MultiSGPMeta) = meta.Kuu_inverse
+"""Return the kernel constructor ``\\theta \\mapsto k``."""
 getKernel(meta::MultiSGPMeta) = meta.kernel
 """Return the [`GPCache`](@ref) used for in-place matrix operations."""
 getGPCache(meta::MultiSGPMeta) = meta.GPCache
+"""Return the approximation method."""
 getmethod(meta::MultiSGPMeta) = meta.method

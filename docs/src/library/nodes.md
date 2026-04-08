@@ -190,10 +190,4 @@ Each node also defines an `@average_energy` method, used to evaluate the variati
 
 ## [Node type traits](@id nodes-traits)
 
-The `@node` macro automatically registers each node with ReactiveMP's type system:
-
-```@docs
-ReactiveMP.is_predefined_node(::Type{<:UniSGP})
-ReactiveMP.is_predefined_node(::Type{<:UniSGP_dID})
-ReactiveMP.is_predefined_node(::Type{<:MultiSGP})
-```
+The `@node` macro automatically registers each node with ReactiveMP's type system.

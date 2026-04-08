@@ -8,11 +8,9 @@ This guide walks you through installing RxGP, building a simple sparse GP regres
 
 ## Installation
 
-RxGP.jl is not yet registered in the Julia General registry. Install it directly from GitHub:
-
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/ReactiveBayes/RxGP.jl")
+Pkg.add("RxGP")
 ```
 
 RxGP depends on [RxInfer.jl](https://github.com/ReactiveBayes/RxInfer.jl), [ReactiveMP.jl](https://github.com/ReactiveBayes/ReactiveMP.jl), and [KernelFunctions.jl](https://github.com/JuliaGaussianProcesses/KernelFunctions.jl), which will be installed automatically.
@@ -22,7 +20,7 @@ RxGP depends on [RxInfer.jl](https://github.com/ReactiveBayes/RxInfer.jl), [Reac
 RxGP implements **Sparse Variational Gaussian Process** (SVGP) inference as factor nodes in a factor graph. The key idea is:
 
 1. Place a small set of **inducing points** ``\mathbf{X}_u = \{x_{u,1}, \ldots, x_{u,M}\}`` in the input space.
-2. Define a **transformed inducing variable** ``\mathbf{v} = K_{uu}^{-1}\mathbf{u}``, where ``\mathbf{u} = f(\mathbf{X}_u)`` and ``K_{uu} = k(\mathbf{X}_u, \mathbf{X}_u})``.
+2. Define a **transformed inducing variable** ``\mathbf{v} = K_{uu}^{-1}\mathbf{u}``, where ``\mathbf{u} = f(\mathbf{X}_u)`` and ``K_{uu} = k(\mathbf{X}_u, \mathbf{X}_u)``.
 3. For each observation ``y_n``, create a [`UniSGP`](@ref) node that connects the output ``y_n``, the input ``x_n``, the shared inducing variable ``\mathbf{v}``, the noise precision ``w``, and the kernel hyperparameters ``\theta``.
 4. Run variational message passing to infer posterior beliefs over all latent variables.
 
