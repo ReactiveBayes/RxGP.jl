@@ -1,5 +1,11 @@
 export BufferUniSGP
 
+"""
+    BufferUniSGP{D,M}
+
+Wraps an inducing-variable message `qv` together with its [`UniSGPMeta`](@ref). When the product of all
+`N` incoming messages has been accumulated (tracked via `meta.counter`), updates the Cholesky factor `meta.Uv`.
+"""
 mutable struct BufferUniSGP{D,M} 
     qv      :: D 
     meta    :: M

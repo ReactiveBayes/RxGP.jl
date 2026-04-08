@@ -1,4 +1,4 @@
-export GenUT, GenUnscented
+export GenUT, GenUnscented, GenUnscentedTransform
 
 """
 The `GenUnscented` structure defines the approximation method of Generalized Unscented Transform. 

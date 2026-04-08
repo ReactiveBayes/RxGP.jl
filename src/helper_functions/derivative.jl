@@ -17,6 +17,12 @@ end
 ## The following functions are copied from the backward message toward "θ" edge
 # 1) univariate case
 #for regression/classification with known input with arbitrary mean function
+"""
+    neg_log_backwardmess_fast(θ; y_data, x_y_data, q_v, q_w, kernel, mean_fn, Xu, ...)
+
+Compute the negative log backward message toward `θ` for the univariate case.
+Used as the objective for gradient-based kernel hyperparameter optimisation.
+"""
 function neg_log_backwardmess_fast(θ; ω_data::Union{Nothing,AbstractVector{<:AbstractVector}}=nothing, y_data::Union{Nothing,AbstractVector}=nothing, x_y_data::Union{AbstractVector{<:Union{Distribution, PointMass, AbstractVector}}, Nothing}, x_ω_data::Union{AbstractVector{<:Union{Distribution, PointMass, AbstractVector}}, Nothing}, q_v, q_w=nothing, q_Wg=nothing, method=nothing, kernel, Lm_fn=nothing, Kxx_fn=nothing, Kxu_fn=nothing, mean_fn, Xu)
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
     KuuF = fastcholesky(Kuu)
@@ -128,6 +134,11 @@ function grad_llh_msg!(grad, θ; in_data_, out_data_, q_v=q_v, q_W_, meta_, froz
 end
 
 ## Define the corresponding derivative (gradient) functions 
+"""
+    grad_llh_default!(grad, θ; ...)
+
+Compute the gradient of [`neg_log_backwardmess_fast`](@ref) w.r.t. `θ` and write it into `grad` (in-place).
+"""
 function grad_llh_default!(grad, θ; ω_data=nothing, y_data=nothing, x_y_data, x_ω_data, q_v, q_w=nothing, q_Wg=nothing, method=nothing, kernel, Lm_fn=nothing, Kxx_fn=nothing, Kxu_fn=nothing, mean_fn=nothing, Xu)
     return ForwardDiff.gradient!(grad, (x) -> neg_log_backwardmess_fast(x; ω_data=ω_data, y_data=y_data, x_y_data=x_y_data, x_ω_data=x_ω_data, q_v=q_v, q_w=q_w, q_Wg=q_Wg, method=method, kernel=kernel, Lm_fn=Lm_fn, Kxx_fn=Kxx_fn, Kxu_fn=Kxu_fn, mean_fn=mean_fn, Xu=Xu), θ)
 end
@@ -145,16 +156,13 @@ end
 
 # 2) multivariate case
 """
-this function is only for C = I
-    y_data: Array of mean.(qy), or array of output 
-    qx : Array of distributions 
-    sumRv_Wbar : Real, sum(Rv_blk .* W)
-    v : mean(qv)
-    W : mean(qW)
-    Tr_W : trace(W)
-    kernel : kernel of gp 
-    Xu : inducing points 
-    method: method to approximate kernel expectation 
+    neg_log_backwardmess_multi(θ; y_data, qx, sumRv_Wbar, v, W, tr_W, kernel, Xu, method)
+
+Compute the negative log backward message toward `θ` for the multivariate ([`MultiSGP`](@ref)) case.
+
+This function is only for `C = I`. Arguments: `y_data` (array of outputs), `qx` (array of input distributions),
+`sumRv_Wbar` (scalar `sum(Rv_blk .* W)`), `v` (mean of `q(v)`), `W` (mean of `q(W)`),
+`tr_W` (trace of `W`), `kernel`, `Xu` (inducing points), `method` (approximation method).
 """
 function neg_log_backwardmess_multi(θ;y_data, qx, sumRv_Wbar, v, W ,tr_W, kernel, Xu,method)
         Kuu_inverse = inv(kernelmatrix(kernel(θ), Xu) + 1e-12*I)        
@@ -176,6 +184,11 @@ function grad_llh_multi(θ;y_data, qx, sumRv_Wbar, v, W ,tr_W, kernel, Xu,method
     return ForwardDiff.gradient((x) -> neg_log_backwardmess_multi(x;y_data, qx, sumRv_Wbar, v, W ,tr_W, kernel, Xu,method), θ)
 end
 
+"""
+    grad_llh_multi!(grad, θ; ...)
+
+Compute the gradient of [`neg_log_backwardmess_multi`](@ref) w.r.t. `θ` and write it into `grad` (in-place).
+"""
 function grad_llh_multi!(grad,θ;y_data, qx, sumRv_Wbar, v, W ,tr_W, kernel, Xu,method)
     return ForwardDiff.gradient!(grad,(x) -> neg_log_backwardmess_multi(x;y_data, qx, sumRv_Wbar, v, W ,tr_W, kernel, Xu,method), θ)
 end

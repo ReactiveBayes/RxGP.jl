@@ -1,7 +1,9 @@
+export approximate_kernel_expectation, approximate_kernel_expectation!
+
 """
-   approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: NormalDistributionsFamily}
-   
-Approximate the expectation E[g(x)] where x ~ distribution using the specified approximation method.
+    approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution)
+
+Approximate the expectation ``\\mathbb{E}_{q(x)}[g(x)]`` where ``x \\sim`` `distribution` using the specified approximation `method`.
 """
 function approximate_kernel_expectation(method::AbstractApproximationMethod, g::Function, distribution::D) where {D <: NormalDistributionsFamily}
     return approximate_kernel_expectation(method, g, mean(distribution), cov(distribution))
@@ -17,6 +19,11 @@ function approximate_kernel_expectation(method::AbstractApproximationMethod, g::
     return gbar
 end
 
+"""
+    approximate_kernel_expectation!(gbar, method::AbstractApproximationMethod, g::Function, distribution)
+
+In-place version of [`approximate_kernel_expectation`](@ref). Writes the result into the pre-allocated array `gbar`.
+"""
 function approximate_kernel_expectation!(gbar::K, method::AbstractApproximationMethod, g::Function, distribution::D) where {K <: Array, D <: NormalDistributionsFamily}
     return approximate_kernel_expectation!(gbar, method, g, mean(distribution), cov(distribution))
 end

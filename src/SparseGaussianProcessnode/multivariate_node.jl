@@ -3,6 +3,44 @@
 
 export MultiSGP
 
+"""
+    MultiSGP
+
+Multivariate variational sparse Gaussian process (VSGP) factor node for
+vector-valued observations ``\\mathbf{y} \\in \\mathbb{R}^D``. The multi-output
+structure is built from the intrinsic coregionalization model (ICM) with
+coregionalization matrix ``C_c = I_D``, so that the matrix-valued kernel is
+``\\mathcal{K}(\\mathbf{x}, \\mathbf{x}') = C_c \\otimes k_{\\boldsymbol{\\theta}}(\\mathbf{x}, \\mathbf{x}')``.
+
+The composite node function collapses the GP prior into the observation model:
+
+```math
+f_{\\mathrm{SGP}}(\\mathbf{y}, \\mathbf{x}, \\mathbf{v}, W, \\boldsymbol{\\theta})
+= \\exp\\!\\Bigl(-\\tfrac{1}{2}\\operatorname{tr}(W\\, A_{\\mathbf{x},\\boldsymbol{\\theta}})\\Bigr)\\;
+  \\mathcal{N}\\!\\bigl(\\mathbf{y} \\mid B_{\\mathbf{x},\\boldsymbol{\\theta}}\\,\\mathbf{v},\\; W^{-1}\\bigr)
+```
+
+where
+
+```math
+B_{\\mathbf{x},\\boldsymbol{\\theta}} = C_c \\otimes k_{\\boldsymbol{\\theta}}(\\mathbf{x}, X_u)
+  \\in \\mathbb{R}^{D \\times DM},
+```
+```math
+A_{\\mathbf{x},\\boldsymbol{\\theta}}
+  = C_c \\otimes k_{\\boldsymbol{\\theta}}(\\mathbf{x}, \\mathbf{x})
+    - B_{\\mathbf{x},\\boldsymbol{\\theta}}\\,
+      K_u^{-1}\\,
+      B_{\\mathbf{x},\\boldsymbol{\\theta}}^\\top
+  \\in \\mathbb{R}^{D \\times D},
+```
+
+with ``K_u = C_c \\otimes k_{\\boldsymbol{\\theta}}(X_u, X_u)`` and
+``\\mathbf{v} = K_u^{-1}\\mathbf{u} \\in \\mathbb{R}^{DM}``.
+The computational complexity is ``\\mathcal{O}(DNM^2)``.
+
+**Edges:** `[out, in, v, w, θ]` — output, input, stacked transformed inducing variables, Wishart noise precision, kernel hyperparameters.
+"""
 struct MultiSGP end 
 
 @node MultiSGP Stochastic [ out, in, v , w, θ] ## out: output, in: input,  v: transformed-inducing points Kuu_inv * u , w: precision of process noise 
