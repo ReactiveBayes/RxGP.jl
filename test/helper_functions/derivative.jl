@@ -23,15 +23,15 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
     method = ghcubature(21)
     kernel, θ_val, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)
     mean_fn = x -> sum(x)
-    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, θ=θ_val)
+    Unimeta = get_UniSGPMeta(D; method=method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, independent_SE_lengthscales=false, Xu=Xu, operator=:grad, θ=θ_val)
     mf = getMeanFn(Unimeta)
     mxu = apply_mean_fn.(Unimeta.Xu, mf)
     KuuF = fastcholesky(kernelmatrix(kernel(θ_val),Unimeta.Xu))
     Ku_mxu = KuuF \ mxu
     mxuT_KuT = transpose(Ku_mxu)
-    Ex = getEx(Unimeta)
-    Dxθ = getDxθ(Unimeta)
-    Cxθ_Xu = getCxθ_Xu(Unimeta)
+    Lm_fn = getLm_fn(Unimeta)
+    Kxx_fn = getKxx_fn(Unimeta)
+    Kxu_fn = getKxu_fn(Unimeta)
 
     gt_logbackwardmess = (x,y,ω) -> begin
         if x isa Distribution
@@ -48,18 +48,18 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
         end
 
         if x isa Distribution
-            Ω0 = approximate_kernel_expectation(Unimeta.method, (x̂) -> Dxθ(x̂, θ_val), x)
-            Ω1 = approximate_kernel_expectation(Unimeta.method, (x̂) -> Cxθ_Xu(x̂, θ_val, Unimeta.Xu), x)
-            Ω2 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Cxθ_Xu(x̂, θ_val, Unimeta.Xu))*Cxθ_Xu(x̂, θ_val, Unimeta.Xu), x)
-            Ω3 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Cxθ_Xu(x̂, θ_val, Unimeta.Xu))*Wg_bar*Cxθ_Xu(x̂, θ_val, Unimeta.Xu), x)
-            Ω4 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Ex(x̂))*Wg_bar*Cxθ_Xu(x̂, θ_val, Unimeta.Xu), x)
+            Ω0 = approximate_kernel_expectation(Unimeta.method, (x̂) -> Kxx_fn(x̂, θ_val), x)
+            Ω1 = approximate_kernel_expectation(Unimeta.method, (x̂) -> Kxu_fn(x̂, θ_val, Unimeta.Xu), x)
+            Ω2 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Kxu_fn(x̂, θ_val, Unimeta.Xu))*Kxu_fn(x̂, θ_val, Unimeta.Xu), x)
+            Ω3 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Kxu_fn(x̂, θ_val, Unimeta.Xu))*Wg_bar*Kxu_fn(x̂, θ_val, Unimeta.Xu), x)
+            Ω4 = approximate_kernel_expectation(Unimeta.method, (x̂) -> transpose(Lm_fn(x̂))*Wg_bar*Kxu_fn(x̂, θ_val, Unimeta.Xu), x)
         else
             x = x isa PointMass ? mean(x) : x
-            Ω0 = Dxθ(x, θ_val)
-            Ω1 = Cxθ_Xu(x, θ_val, Unimeta.Xu)
+            Ω0 = Kxx_fn(x, θ_val)
+            Ω1 = Kxu_fn(x, θ_val, Unimeta.Xu)
             Ω2 = transpose(Ω1) * Ω1
             Ω3 = transpose(Ω1) * Wg_bar * Ω1
-            Ω4 = transpose(Ex(x)) * Wg_bar * Ω1
+            Ω4 = transpose(Lm_fn(x)) * Wg_bar * Ω1
         end
 
         gt_logbackwardmess_value = (y) -> begin
@@ -94,20 +94,20 @@ import RxGP: sum_diagonal_M, trace_blkmatrix
     y_data_vector = [f(x) for x in x_data_vector]
     ω_data_vector = [∇f(x) for x in x_data_vector]
     gt_negllh_vector = -sum(gt_logbackwardmess(x, y, ω) for (x, y, ω) in zip(x_data_vector, y_data_vector, ω_data_vector))
-    msg_negllh_vector = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_vector, y_data=y_data_vector, x_data=x_data_vector, q_v=q_v, q_w=q_w, q_Wg=q_Wg, kernel=kernel, Ex=Ex, Dxθ=Dxθ, Cxθ_Xu=Cxθ_Xu, mean_fn=mean_fn, Xu=Xu)
+    msg_negllh_vector = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_vector, y_data=y_data_vector, x_y_data=x_data_vector, x_ω_data=x_data_vector, q_v=q_v, q_w=q_w, q_Wg=q_Wg, kernel=kernel, Lm_fn=Lm_fn, Kxx_fn=Kxx_fn, Kxu_fn=Kxu_fn, mean_fn=mean_fn, Xu=Xu)
     @test isapprox(gt_negllh_vector, msg_negllh_vector; atol=1e-6)
 
     x_data_pointmass = [PointMass(randn(D)) for _ in 1:50]
     y_data_pointmass = [f(mean(x)) for x in x_data_pointmass]
     ω_data_pointmass = [∇f(mean(x)) for x in x_data_pointmass]
     gt_negllh_pointmass = -sum(gt_logbackwardmess(x, y, ω) for (x, y, ω) in zip(x_data_pointmass, y_data_pointmass, ω_data_pointmass))
-    msg_negllh_pointmass = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_pointmass, y_data=y_data_pointmass, x_data=x_data_pointmass, q_v=q_v, q_w=q_w, q_Wg=q_Wg, kernel=kernel, Ex=Ex, Dxθ=Dxθ, Cxθ_Xu=Cxθ_Xu, mean_fn=mean_fn, Xu=Xu)
+    msg_negllh_pointmass = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_pointmass, y_data=y_data_pointmass, x_y_data=x_data_pointmass, x_ω_data=x_data_pointmass, q_v=q_v, q_w=q_w, q_Wg=q_Wg, kernel=kernel, Lm_fn=Lm_fn, Kxx_fn=Kxx_fn, Kxu_fn=Kxu_fn, mean_fn=mean_fn, Xu=Xu)
     @test isapprox(gt_negllh_pointmass, msg_negllh_pointmass; atol=1e-6)
 
     x_data_uncertain = [MvNormalMeanCovariance(randn(D), diageye(D)) for _ in 1:50]
     y_data_uncertain = [f(mean(x)) for x in x_data_uncertain]
     ω_data_uncertain = [∇f(mean(x)) for x in x_data_uncertain]
     gt_negllh_uncertain = -sum(gt_logbackwardmess(x, y, ω) for (x, y, ω) in zip(x_data_uncertain, y_data_uncertain, ω_data_uncertain))
-    msg_negllh_uncertain = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_uncertain, y_data=y_data_uncertain, x_data=x_data_uncertain, q_v=q_v, q_w=q_w, q_Wg=q_Wg, method=method, kernel=kernel, Ex=Ex, Dxθ=Dxθ, Cxθ_Xu=Cxθ_Xu, mean_fn=mean_fn, Xu=Xu)
+    msg_negllh_uncertain = neg_log_backwardmess_fast(θ_val; ω_data=ω_data_uncertain, y_data=y_data_uncertain, x_y_data=x_data_uncertain, x_ω_data=x_data_uncertain, q_v=q_v, q_w=q_w, q_Wg=q_Wg, method=method, kernel=kernel, Lm_fn=Lm_fn, Kxx_fn=Kxx_fn, Kxu_fn=Kxu_fn, mean_fn=mean_fn, Xu=Xu)
     @test isapprox(gt_negllh_uncertain, msg_negllh_uncertain; atol=1e-6)
 end

@@ -1,5 +1,5 @@
-# rule for "θ" edge (univariate gradient case)
-@rule UniSGP_Grad(:θ, Marginalisation) (q_out::IN_OUT, q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_Wg::NOISE_Wg, meta::UniSGPMeta,) = begin
+# rule for "θ" edge (univariate dID case)
+@rule UniSGP_dID(:θ, Marginalisation) (q_out::IN_OUT, q_in::IN_OUT, q_v::MultivariateNormalDistributionsFamily, q_Wg::NOISE_Wg, meta::UniSGPMeta,) = begin
     μ_ω, Σ_ω = mean_cov_vector_matrix(q_out)
     μ_in, Σ_in = mean_cov_vector_matrix(q_in)
     μ_v, Σ_v = mean_cov(q_v)
@@ -9,22 +9,22 @@
     Ku_mxu = meta.KuuF \ mxu
     mxuT_KuT = transpose(Ku_mxu)
     Rv = μ_v * transpose(μ_v) + Σ_v
-    Ex = getEx(meta)
-    Dxθ = getDxθ(meta)
-    Cxθ_Xu = getCxθ_Xu(meta)
+    Lm_fn = getLm_fn(meta)
+    Kxx_fn = getKxx_fn(meta)
+    Kxu_fn = getKxu_fn(meta)
 
     if q_in isa Distribution
-        Ω0 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Dxθ(x, θ), q_in)
-        Ω1 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Cxθ_Xu(x, θ, meta.Xu), q_in)
-        Ω2 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Cxθ_Xu(x, θ, meta.Xu), q_in)
-        Ω3 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Cxθ_Xu(x, θ, meta.Xu))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in)
-        Ω4 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Ex(x))*Wg_bar*Cxθ_Xu(x, θ, meta.Xu), q_in)
+        Ω0 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Kxx_fn(x, θ), q_in)
+        Ω1 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ, meta.Xu), q_in)
+        Ω2 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Kxu_fn(x, θ, meta.Xu))*Kxu_fn(x, θ, meta.Xu), q_in)
+        Ω3 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Kxu_fn(x, θ, meta.Xu))*Wg_bar*Kxu_fn(x, θ, meta.Xu), q_in)
+        Ω4 = (θ) -> approximate_kernel_expectation(meta.method, (x) -> transpose(Lm_fn(x))*Wg_bar*Kxu_fn(x, θ, meta.Xu), q_in)
     else
-        Ω0 = (θ) -> Dxθ(μ_in, θ)
-        Ω1 = (θ) -> Cxθ_Xu(μ_in, θ, meta.Xu)
+        Ω0 = (θ) -> Kxx_fn(μ_in, θ)
+        Ω1 = (θ) -> Kxu_fn(μ_in, θ, meta.Xu)
         Ω2 = (θ) -> transpose(Ω1(θ)) * Ω1(θ)
         Ω3 = (θ) -> transpose(Ω1(θ)) * Wg_bar * Ω1(θ)
-        Ω4 = (θ) -> transpose(Ex(μ_in)) * Wg_bar * Ω1(θ)
+        Ω4 = (θ) -> transpose(Lm_fn(μ_in)) * Wg_bar * Ω1(θ)
     end
 
 

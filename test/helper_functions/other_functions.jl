@@ -1,4 +1,4 @@
-@testsnippet test_snippet begin
+﻿@testsnippet test_snippet begin
     using RxGP
     using RxInfer
     using ReactiveMP
@@ -30,7 +30,7 @@
         end
         q_v = MvNormalMeanCovariance(randn(rng, Nu), randn(rng, Nu, Nu) |> x -> x * x' + 0.1I)
         kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=kernel_spec, num_SE=2, num_SM=2, independent_SE_lengthscales=independent_SE_lengthscales)
-        meta = get_UniSGPMeta(D; method=grad_default_method, mean_fn=test_mean_fn, kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales, Xu=Xu, θ=θ_val)
+        meta = get_UniSGPMeta(D; method=grad_default_method, mean_fn=test_mean_fn, kernel=kernel, kernel_spec=kernel_spec, mode=mode, operator=:grad, independent_SE_lengthscales=independent_SE_lengthscales, Xu=Xu, θ=θ_val)
         return (; method=grad_default_method, D, Xu, Nu=length(Xu), kernel, kernel_spec, mode, independent_SE_lengthscales, θ_val, meta, q_in, q_out, q_v, q_Wg, q_θ=PointMass(θ_val), rng)
     end
 end
@@ -162,7 +162,7 @@ end
     # composing meta as per get_UniSGPMeta
     dims_data = D
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
-    KuuF = fastcholesky(Kuu)
+    KuuF = cholesky(Kuu)
     x_dummy = zeros(D)
     Ψx = 0.0
     Ψxx = 0.0
@@ -172,10 +172,8 @@ end
     Ψ3 = kernelmatrix(kernel(θ), [x_dummy], Xu)
     Uv = zeros(size(Xu,1), size(Xu,1))
 
-    Ex_val = get_Ex(;mean_fn=mean_fn)(x_dummy)
-    Fxθ_val = get_Fxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, θ)
-    Dxθ_val = get_Dxθ(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, θ)
-    Cxθ_Xu_val = get_Cxθ_Xu(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, θ, Xu)
+    Kxx_val = get_gradient_Kxx_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, θ)
+    Kxu_val = get_gradient_Kxu_fn(D; kernel=kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, θ, Xu)
 
     dims_theta = length(θ)
     counter = 0
@@ -190,10 +188,9 @@ end
     @test getΨ1_trans(meta) == Ψ1_trans
     @test getΨ2(meta) == Ψ2
     @test getΨ3(meta) == Ψ3
-    @test getEx(meta)(x_dummy) == Ex_val
-    @test getFxθ(meta)(x_dummy, θ) == Fxθ_val
-    @test getDxθ(meta)(x_dummy, θ) == Dxθ_val
-    @test getCxθ_Xu(meta)(x_dummy, θ, Xu) == Cxθ_Xu_val
+    @test length(getLm_fn(meta)(x_dummy)) == D
+    @test getKxx_fn(meta)(x_dummy, θ) == Kxx_val
+    @test getKxu_fn(meta)(x_dummy, θ, Xu) == Kxu_val
     @test getKuuF(meta) == KuuF
     @test getKernel(meta) == kernel
     @test get_dims_data(meta) == D
@@ -204,15 +201,13 @@ end
 
 end
 
-@testitem "node_rule/univariate_grad/Test get_Ex" setup=[test_snippet] begin
+@testitem "node_rule/univariate_grad/Test gradient mean function (Lm_fn)" setup=[test_snippet] begin
     function num_grad(x_dummy, mean_fn, D)
         ϵ = 1e-6
         numerical_grad = zeros(D)
         for i in 1:D
-            x_plus = copy(x_dummy)
-            x_minus = copy(x_dummy)
-            x_plus[i] += ϵ
-            x_minus[i] -= ϵ
+            x_plus = copy(x_dummy); x_minus = copy(x_dummy)
+            x_plus[i] += ϵ; x_minus[i] -= ϵ
             numerical_grad[i] = (mean_fn(x_plus) - mean_fn(x_minus)) / (2 * ϵ)
         end
         return numerical_grad
@@ -220,25 +215,33 @@ end
 
     D = 1
     mean_fn = (x) -> x[] |> x -> x^2 + 0.35x
-    # Write test to confirm that get_Ex produces (a) an anonymous function 
-    @test typeof(get_Ex(;mean_fn=mean_fn)) <: Function
-    # Write test to confirm that (b) this anonymous function produces vector output of correct dimension
+    kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=:SE)
+    Xu = [[0.1 * i] for i in 1:5]
+    meta = get_UniSGPMeta(D; method=grad_default_method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, operator=:grad, Xu=Xu, θ=θ_val)
+    Lm_fn = getLm_fn(meta)
     x_dummy = [1.3]
-    @test length(get_Ex(;mean_fn=mean_fn)(x_dummy)) == D
-    # Write test to confirm that (c) this vector output represents the derivative / gradient of the mean function at x_dummy
-    @test get_Ex(;mean_fn=mean_fn)(x_dummy) ≈ num_grad(x_dummy, mean_fn, D) atol=1e-5
-    @test get_Ex(;mean_fn=mean_fn)(x_dummy) == [2.95]
+    # (a) Lm_fn is a function
+    @test typeof(Lm_fn) <: Function
+    # (b) produces vector output of correct dimension
+    @test length(Lm_fn(x_dummy)) == D
+    # (c) output is the gradient of mean_fn
+    @test Lm_fn(x_dummy) ≈ num_grad(x_dummy, mean_fn, D) atol=1e-5
+    @test Lm_fn(x_dummy) ≈ [2.95] atol=1e-10
 
     D = 3
     mean_fn = (x) -> sum(x .^ 2)
+    kernel, θ_val, _ = get_simple_kernel_and_params(D; kernel_spec=:SE)
+    Xu = [randn(D) for _ in 1:5]
+    meta = get_UniSGPMeta(D; method=grad_default_method, mean_fn=mean_fn, kernel=kernel, kernel_spec=:SE, mode=:AN, operator=:grad, Xu=Xu, θ=θ_val)
+    Lm_fn = getLm_fn(meta)
     x_dummy = [1.0, -2.0, 0.5]
-    @test typeof(get_Ex(;mean_fn=mean_fn)) <: Function
-    @test length(get_Ex(;mean_fn=mean_fn)(x_dummy)) == D
-    @test get_Ex(;mean_fn=mean_fn)(x_dummy) ≈ num_grad(x_dummy, mean_fn, D) atol=1e-5
-    @test get_Ex(;mean_fn=mean_fn)(x_dummy) == [2.0, -4.0, 1.0]
+    @test typeof(Lm_fn) <: Function
+    @test length(Lm_fn(x_dummy)) == D
+    @test Lm_fn(x_dummy) ≈ num_grad(x_dummy, mean_fn, D) atol=1e-5
+    @test Lm_fn(x_dummy) ≈ [2.0, -4.0, 1.0] atol=1e-10
 end
 
-@testitem "node_rule/univariate_grad/Test get_Cxθ_Xu" setup=[test_snippet] begin
+@testitem "node_rule/univariate_grad/Test get_gradient_Kxu_fn" setup=[test_snippet] begin
     function num_grad(x_dummy, ctx)
         f = (x) -> kernelmatrix(ctx.kernel(ctx.θ_val), [x], ctx.Xu)
         numerical_grad = zeros(ctx.D, length(ctx.Xu))
@@ -256,11 +259,11 @@ end
     end
 
     D, ctx, x_dummy = 1, test_fixture(D=1), [1.3]
-    # Write test to confirm that get_Ex produces (a) an anonymous function 
-    @test typeof(get_Cxθ_Xu(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)) <: Function
+    # Write test to confirm that get_gradient_Kxu_fn produces (a) an anonymous function 
+    @test typeof(get_gradient_Kxu_fn(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)) <: Function
     # Write test to confirm that (b) this anonymous function produces matrix output of correct dimensionality
-    Cxθ_Xu_output = get_Cxθ_Xu(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu)
-    @test size(Cxθ_Xu_output) == (ctx.D, length(ctx.Xu))
+    Kxu_output = get_gradient_Kxu_fn(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu)
+    @test size(Kxu_output) == (ctx.D, length(ctx.Xu))
 
     GT_SE_1_true = [-0.2691768268281436 -0.5487623838673628 -0.46320326629878394 -0.40955812696807925 -0.2682954802768478]
     GT_SE_2_true = [-0.01086223379645479 -5.077773570641767e-5 -4.210768798680061e-6 0.02690647937092505 -0.28680713171080896; -0.08370736593113492 -6.99027597822954e-5 -1.0719550722848323e-5 -0.11035790396449197 -0.282397204787177]
@@ -298,142 +301,142 @@ end
     # :SE Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AN, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_false atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AN, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SE_3_false atol=1e-5
 
     # :SEn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AN, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_false atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AN, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_3_false atol=1e-5
 
     # :SMn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SMn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_1_true atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_1_true atol=1e-4
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_2_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_3_true atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_3_true atol=1e-5
     
     kernel_spec, mode, independent_SE_lengthscales = :SMn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_1_false atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_1_false atol=1e-4
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_2_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_3_false atol=1e-5
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SMn_3_false atol=1e-5
 
     # :SEn_SMn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SEn_SMn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_1_true atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_1_true atol=1e-4
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_2_true atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_2_true atol=1e-4
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_3_true atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_3_true atol=1e-4
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn_SMn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_1_false atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-4
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_1_false atol=1e-4
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_2_false atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_2_false atol=1e-4
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_grad(x_dummy, ctx) ≈ get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
-    @test get_Cxθ_Xu(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_3_false atol=1e-4
+    @test num_grad(x_dummy, ctx) ≈ get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) atol=1e-5
+    @test get_gradient_Kxu_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val, ctx.Xu) ≈ GT_SEn_SMn_3_false atol=1e-4
 
 end
 
-@testitem "node_rule/univariate_grad/Test get_Dxθ" setup=[test_snippet] begin
+@testitem "node_rule/univariate_grad/Test get_gradient_Kxx_fn" setup=[test_snippet] begin
     function num_hessian(x_dummy, ctx)
         f = (x, x′) -> kernelmatrix(ctx.kernel(ctx.θ_val), [x], [x′])[1, 1]
         H = zeros(ctx.D, ctx.D)
@@ -449,11 +452,11 @@ end
     end
 
     D, ctx, x_dummy = 1, test_fixture(D=1), [1.3]
-    # Write test to confirm that get_Ex produces (a) an anonymous function 
-    @test typeof(get_Dxθ(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)) <: Function
+    # Write test to confirm that get_gradient_Kxx_fn produces (a) an anonymous function 
+    @test typeof(get_gradient_Kxx_fn(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)) <: Function
     # Write test to confirm that (b) this anonymous function produces matrix output of correct dimensionality
-    Dxθ_output = get_Dxθ(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)(x_dummy, ctx.θ_val)
-    @test size(Dxθ_output) == (ctx.D, ctx.D)
+    Kxx_output = get_gradient_Kxx_fn(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode, independent_SE_lengthscales=ctx.independent_SE_lengthscales)(x_dummy, ctx.θ_val)
+    @test size(Kxx_output) == (ctx.D, ctx.D)
 
     GT_SE_1_true = [0.8616780045351473;;]
     GT_SE_2_true = [0.95 0.0; 0.0 0.8616780045351473]
@@ -491,247 +494,138 @@ end
     # :SE Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AN, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_false atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SE, :AN, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SE_3_false atol=1e-5
 
     # :SEn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AN, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_false atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn, :AN, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-5
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_false atol=1e-5
 
     # :SMn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SMn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_3_true atol=1e-5
     
     kernel_spec, mode, independent_SE_lengthscales = :SMn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_3_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SMn_3_false atol=1e-5
 
     # :SEn_SMn Kernel
     kernel_spec, mode, independent_SE_lengthscales = :SEn_SMn, :AD, true
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_1_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_1_true atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_2_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_2_true atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_3_true atol=1e-5
 
     kernel_spec, mode, independent_SE_lengthscales = :SEn_SMn, :AD, false
     D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_1_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_1_false atol=1e-5
     D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_2_false atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_2_false atol=1e-5
     D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)
-    @test num_hessian(x_dummy, ctx) ≈ get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Dxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_3_false atol=1e-5
-end
-
-
-@testitem "node_rule/univariate_grad/Test get_Fxθ" setup=[test_snippet] begin
-    function num_grad_xprime(x_dummy, ctx)
-        f = (x, x′) -> kernelmatrix(ctx.kernel(ctx.θ_val), [x], [x′])[1, 1]
-        g = zeros(ctx.D)
-        ϵ = 1e-3
-        for j in 1:ctx.D
-            x_jp = copy(x_dummy); x_jm = copy(x_dummy)
-            x_jp[j] += ϵ; x_jm[j] -= ϵ
-            g[j] = (f(x_dummy, x_jp) - f(x_dummy, x_jm)) / (2ϵ)
-        end
-        return reshape(g, 1, ctx.D)
-    end
-
-    D, ctx, x_dummy = 3, test_fixture(D=3), [1.3, 2.7, 0.5]
-    # Write test to confirm that get_Ex produces (a) an anonymous function 
-    @test typeof(get_Fxθ(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode)) <: Function
-    # Write test to confirm that (b) this anonymous function produces matrix output of correct dimensionality
-    Fxθ_output = get_Fxθ(ctx.D; kernel=ctx.kernel, kernel_spec=ctx.kernel_spec, mode=ctx.mode)(x_dummy, ctx.θ_val)
-    @test size(Fxθ_output) == (1, ctx.D)
-
-    GT_SE_1_true = [0.0;;]
-    GT_SE_2_true = [0.0 0.0]
-    GT_SE_3_true = [0.0 0.0 0.0]
-
-    GT_SEn_1_true = [0.0;;]
-    GT_SEn_2_true = [0.0 0.0]
-    GT_SEn_3_true = [0.0 0.0 0.0]
-    
-    GT_SMn_1_true = [0.0;;]
-    GT_SMn_2_true = [0.0 0.0]
-    GT_SMn_3_true = [0.0 0.0 0.0]
-
-    GT_SEn_SMn_1_true = [0.0;;]
-    GT_SEn_SMn_2_true = [0.0 0.0]
-    GT_SEn_SMn_3_true = [0.0 0.0 0.0]
-
-    # Write tests to confirm that (c) this matrix output represents the gradient of (the kernelmatrix evaluated between x and Xu) with respect to input x at x_dummy
-    # :SE Kernel
-    kernel_spec, mode = :SE, :AD
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
-
-    kernel_spec, mode = :SE, :AN
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SE_3_true atol=1e-5
-
-    # :SEn Kernel
-    kernel_spec, mode = :SEn, :AD
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
-
-    kernel_spec, mode = :SEn, :AN
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-5
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_3_true atol=1e-5
-
-    # :SMn Kernel
-    kernel_spec, mode = :SMn, :AD
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SMn_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SMn_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SMn_3_true atol=1e-5
-
-    # :SEn_SMn Kernel
-    kernel_spec, mode = :SEn_SMn, :AD
-    D, x_dummy, ctx = 1, [1.3], test_fixture(D=1, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_1_true atol=1e-5
-    D, x_dummy, ctx = 2, [1.3, 2.7], test_fixture(D=2, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_2_true atol=1e-5
-    D, x_dummy, ctx = 3, [1.3, 2.7, 0.5], test_fixture(D=3, kernel_spec=kernel_spec, mode=mode)
-    @test num_grad_xprime(x_dummy, ctx) ≈ get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) atol=1e-3
-    @test get_Fxθ(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_3_true atol=1e-5
+    @test num_hessian(x_dummy, ctx) ≈ get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) atol=1e-3
+    @test get_gradient_Kxx_fn(D; kernel=ctx.kernel, kernel_spec=kernel_spec, mode=mode, independent_SE_lengthscales=independent_SE_lengthscales)(x_dummy, ctx.θ_val) ≈ GT_SEn_SMn_3_false atol=1e-5
 end
 
 
