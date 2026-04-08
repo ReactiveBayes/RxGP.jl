@@ -11,6 +11,7 @@ makedocs(;
     modules=[RxGP],
     authors="HoangMHNguyen <m.h.n.hoang@tue.nl>, ofSingularMind <a.h.ledbetter@tue.nl>, and contributors",
     sitename="RxGP.jl",
+    checkdocs = :exports,
     format=Documenter.HTML(;
         canonical="https://ReactiveBayes.github.io/RxGP.jl",
         edit_link="main",

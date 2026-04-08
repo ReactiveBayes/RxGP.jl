@@ -49,6 +49,8 @@ The following functions compute the negative log backward message and its gradie
 
 ```@docs
 neg_log_backwardmess_fast
+neg_log_backwardmess_uncertain
+neg_log_backwardmess_msg
 grad_llh_default!
 neg_log_backwardmess_multi
 grad_llh_multi!
