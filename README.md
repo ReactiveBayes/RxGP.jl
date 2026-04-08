@@ -121,6 +121,19 @@ To add **gradient observations**, use `UniSGP_dID` with `operator = :grad` and a
 
 Full documentation is available at **[docs.rxgp.jl](https://ReactiveBayes.github.io/RxGP.jl/stable/)**.
 
+## Examples
+
+Jupyter notebooks are provided in the `examples/` directory. To run them, set up the dedicated environment once from the repository root:
+
+```julia
+using Pkg
+Pkg.activate("examples")
+Pkg.develop(PackageSpec(path="."))   # link local RxGP
+Pkg.instantiate()
+```
+
+On subsequent sessions, only `Pkg.activate("examples")` is needed before opening a notebook.
+
 ## References
 
 - H.M.H. Nguyen, İ. Şenöz, and B. de Vries, "A Factor Graph Approach to Variational Sparse Gaussian Processes," *IEEE Open Journal of Signal Processing*, 2025.

@@ -36,9 +36,12 @@ GP regression that incorporates **derivative observations** alongside function-v
 
 !!! tip
     To run the notebooks, clone the repository and open them with Jupyter or VS Code.
-    The notebooks use the root project environment — activate and instantiate it once:
+    The notebooks have their own dedicated environment in `examples/`. Set it up once from the
+    repository root:
     ```julia
     using Pkg
-    Pkg.activate(".")
+    Pkg.activate("examples")
+    Pkg.develop(PackageSpec(path="."))   # link local RxGP
     Pkg.instantiate()
     ```
+    On subsequent sessions, only `Pkg.activate("examples")` is needed before opening a notebook.

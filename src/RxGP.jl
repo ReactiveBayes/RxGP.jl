@@ -2,7 +2,7 @@ module RxGP
 
 using RxInfer, LoopVectorization, ReactiveMP
 using Zygote, Optim, ForwardDiff, StatsFuns, KernelFunctions, LinearAlgebra
-using AbstractGPs, Flux, Random, SparseArrays, SpecialFunctions, StableRNGs
+using Distributions, Random, SparseArrays
 
 import ReactiveMP: getweights, getpoints, approximate_meancov, WishartFast
 
