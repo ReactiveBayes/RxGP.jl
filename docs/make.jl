@@ -30,6 +30,7 @@ makedocs(;
         canonical="https://ReactiveBayes.github.io/RxGP.jl",
         edit_link="main",
         assets=String[],
+        size_threshold=nothing,
     ),
     pages=[
         "Home" => "index.md",
