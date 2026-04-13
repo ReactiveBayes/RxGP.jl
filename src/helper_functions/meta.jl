@@ -4,6 +4,14 @@ export getKuuInverse, getGPCache
 
 #---- Define metas -----# 
 ## create UniSGP meta  
+"""
+    UniSGPMeta{I,E,F,D,C,CF,K} 
+
+Metadata container for UniSGP node.
+
+    
+
+"""
 mutable struct UniSGPMeta{I,E,F,D,C,CF,K}
     method          :: Union{Nothing,AbstractApproximationMethod}
     mean_fn         :: Function
