@@ -79,10 +79,16 @@ function _build_operator_fns(D; mean_fn, kernel, kernel_spec, mode, operator::Sy
 end
 
 # ======= Single source of meta information ======= #
-# operator — :fn (default), :grad, or :joint_fn_grad (see _build_operator_fns above).
-# Custom Lm_fn / Kxu_fn / Kxx_fn can be provided to use an arbitrary linear operator;
-# if any are given manually all three must be provided.
-function get_UniSGPMeta(D; method=nothing, mean_fn, kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD,
+"""
+    get_UniSGPMeta(D; method, mean_fn, kernel, kernel_spec=:SE, mode=:AD, operator=:fn, independent_SE_lengthscales=true, Xu, θ, Lm_fn=nothing, Kxu_fn=nothing, Kxx_fn=nothing)
+
+Construct a [`UniSGPMeta`](@ref) for input dimension `D`. This is the recommended constructor.
+
+`operator` selects the linear observation operator: `:fn` (identity, P=1), `:grad` (gradient, P=D),
+or `:joint_fn_grad` (stacked, P=1+D). Custom operator functions `Lm_fn`, `Kxu_fn`, `Kxx_fn`
+can be provided to override the default.
+"""
+function get_UniSGPMeta(D; method=ghcubature(21), mean_fn, kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD,
                          operator::Symbol=:fn,
                          independent_SE_lengthscales::Bool=true, Xu, θ,
                          Lm_fn=nothing, Kxu_fn=nothing, Kxx_fn=nothing)
@@ -116,7 +122,12 @@ end
 
 
 # # ======= Kernel and Mean-Function Diff Functions - GENERAL ======= #
-# Gradient of k(x, Xu_j) w.r.t x — produces K̃_xu(x,θ) ∈ ℝ^{D×M} for the gradient operator.
+"""
+    get_gradient_Kxu_fn(D; kernel, kernel_spec=:SE, mode=:AD, independent_SE_lengthscales=true)
+
+Return a function `(x, θ, Xu) -> Matrix` that computes the gradient of the cross-kernel
+``\\nabla_x k(x, X_u)`` (a `D×M` matrix). Supports `:AD` (autodiff) and `:AN` (analytic, SE only) modes.
+"""
 function get_gradient_Kxu_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
     if mode == :AD
         # AutoDiff approach
@@ -189,7 +200,12 @@ function get_gradient_Kxu_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mod
     end
 end
 
-# Hessian of k(x, x) w.r.t x — produces K̃_xx(x,θ) ∈ ℝ^{D×D} for the gradient operator.
+"""
+    get_gradient_Kxx_fn(D; kernel, kernel_spec=:SE, mode=:AD, independent_SE_lengthscales=true)
+
+Return a function `(x, θ) -> Matrix` that computes the Hessian of the auto-kernel
+``\\nabla_x \\nabla_{x'} k(x, x')`` (a `D×D` matrix). Supports `:AD` and `:AN` modes.
+"""
 function get_gradient_Kxx_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mode::Symbol=:AD, independent_SE_lengthscales::Bool=true)
     if mode == :AD
         # AutoDiff approach
@@ -253,26 +269,14 @@ function get_gradient_Kxx_fn(D; kernel::Any=kernel, kernel_spec::Symbol=:SE, mod
 end
 
 # # ================== Simple KernelFunctions.jl Kernel Builder (dimension-agnostic) ================== #
+"""
+    get_simple_kernel_and_params(D; kernel_spec=:SE, num_SE=1, num_SM=1, independent_SE_lengthscales=true)
+
+Return `(kernel_fn, θ_init, dim_θ)` for a parameterised kernel in input dimension `D`.
+
+Supported `kernel_spec` values: `:SE`, `:SEn`, `:SMn`, `:SEn_SMn`.
+"""
 function get_simple_kernel_and_params(D; kernel_spec::Symbol=:SE, num_SE::Int=1, num_SM::Int=1, independent_SE_lengthscales::Bool=true)
-    """
-        get_simple_kernel_and_params(D; kernel_spec=:SE, num_SE=1, num_SM=1)
-
-    This function returns a simple KernelFunctions.jl kernel and its parameters for a given dimensionality and kernel specification.
-
-    # Arguments
-    - `D::Int`: Dimensionality of the input data.
-    - `kernel_spec::Symbol`: Type of kernel to create. Options are:
-        - `:SE`: Squared Exponential Kernel
-        - `:SEn`: Mixture of num_SE Squared Exponential Kernels
-        - `:SMn`: Spectral Mixture Kernel with num_SM components
-        - `:SEn_SMn`: Mixture of num_SE Squared Exponential Kernels + Spectral Mixture Kernel with num_SM components
-    - `num_SE::Int`: Number of components for the SE mixture (used if `kernel_spec` is `:SEn` or `:SEn_SMn`).
-    - `num_SM::Int`: Number of components for the Spectral Mixture kernel (used if `kernel_spec` is `:SMn` or `:SEn_SMn`).
-    # Returns
-    - `kernel`: A callable KernelFunctions.jl kernel.
-    - `θ_init`: Initial parameters for the kernel.
-    - `dim_θ`: Dimensionality of the kernel parameters.
-    """
     if kernel_spec == :SE
         # SEKernel
         SE = independent_SE_lengthscales ? D + 1 : 2 # number of params (1 weight + D lengthscales or 1 shared lengthscale)
@@ -372,11 +376,13 @@ end
 # ==== ======= Mean Function Application Helper (handles scalars, vectors, vectors of vectors) ======= #
 """
     apply_mean_fn(x, mf)
-Apply a SCALAR mean function `mf` to input `x`, handling different input types:
-- If `x` is a scalar, apply `mf` directly. E.g. for mf(x) = x^2, apply_mean_fn(3, mf) returns 9.
+
+Apply a scalar mean function `mf` to input `x`, handling different input types:
+
+- If `x` is a scalar, apply `mf` directly, e.g. `mf(x) = x^2` gives `apply_mean_fn(3, mf) == 9`.
 - If `x` is a length-1 vector of numbers, apply `mf` to the single element.
 - If `x` is a longer vector of numbers, apply `mf` to the entire vector.
-- If `x` is a vector of vectors, use apply_mean_fn.(x, mf) to apply `mf` to each sub-vector.
+- If `x` is a vector of vectors, use `apply_mean_fn.(x, mf)` to broadcast over sub-vectors.
 """
 apply_mean_fn(x::Number, mf) = mf(x) # scalar
 apply_mean_fn(x::AbstractVector{<:Number}, mf) = begin length(x) == 1 ? mf(x[1]) : mf(x) end # length-1 vector of numbers
@@ -384,15 +390,10 @@ apply_mean_fn(x::AbstractVector{<:Number}, mf) = begin length(x) == 1 ? mf(x[1])
 
 # ==================== Expanded mean_cov functionality to enforce return types ======================== #
 """
-    mean_cov_scalar_matrix(x::Union{Real, AbstractVector, PointMass, UnivariateNormalDistributionsFamily})
+    mean_cov_scalar_matrix(x)
 
-    Dimensionality of x must be 1. Return mean as scalar and covariance as matrix.
-
-    args:
-        x::Union{Real, AbstractVector, PointMass, UnivariateNormalDistributionsFamily}
-
-    returns:
-        (mean::Number, cov::Matrix)
+Return `(mean, cov)` where `mean` is a scalar and `cov` is a `1×1` matrix.
+Input `x` must be one-dimensional (scalar, length-1 vector, `PointMass`, or univariate distribution).
 """
 mean_cov_scalar_matrix(x::Real) = (x, [0.0;;]) # Base case: scalar number
 mean_cov_scalar_matrix(x::UnivariateNormalDistributionsFamily) = (mean(x), [var(x);;]) # Univariate normal distributions
@@ -415,15 +416,11 @@ function mean_cov_scalar_matrix(x::PointMass{<:AbstractVector{<:Real}})
 end
 
 """
-    mean_cov_vector_matrix(x::Union{Real, AbstractVector, PointMass, NormalDistributionsFamily})
+    mean_cov_vector_matrix(x)
 
-    Regardless of dimensionality of x, return mean as vector and covariance as matrix.
-
-    args:
-        x::Union{Real, AbstractVector, PointMass, NormalDistributionsFamily}
-
-    returns:
-        (mean::AbstractVector, cov::Matrix)
+Return `(mean, cov)` where `mean` is a vector and `cov` is a matrix, regardless of the
+dimensionality of `x`. Accepts `Real`, `AbstractVector`, `PointMass`, or any
+`NormalDistributionsFamily`.
 """
 mean_cov_vector_matrix(x::Real) = ([x], [0.0;;]) # Real scalar
 mean_cov_vector_matrix(x::UnivariateNormalDistributionsFamily) = ([mean(x)], [var(x);;]) # Univariate normal distribution
@@ -441,6 +438,11 @@ end
 
 
 # ==================== Miscellaneous ======================== #
+"""
+    jdotavx(a, b)
+
+Vectorised dot product of arrays `a` and `b` using `LoopVectorization.@turbo`.
+"""
 function jdotavx(a::AbstractArray, b::AbstractArray)
     a_flat, b_flat = collect(vec(a)), collect(vec(b))
     @assert axes(a_flat) == axes(b_flat)
@@ -452,6 +454,11 @@ function jdotavx(a::AbstractArray, b::AbstractArray)
     return s
 end
 
+"""
+    create_blockmatrix(A, d, M)
+
+Return a `d×d` matrix of `M×M` views into the block structure of `A`.
+"""
 function create_blockmatrix(A,d,M)
     return [view(A,i:i+M-1,j:j+M-1) for i=1:M:M*d, j=1:M:M*d]
 end

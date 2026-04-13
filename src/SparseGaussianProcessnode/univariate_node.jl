@@ -3,6 +3,26 @@
 
 export UniSGP, UniSGPMeta
 
+"""
+    UniSGP
+
+Univariate variational sparse Gaussian process (VSGP) factor node. This is the
+identity-operator (``\\mathcal{L} = \\mathcal{I}``) specialisation of the dID-VSGP
+node ([`UniSGP_dID`](@ref)).
+
+The composite node function collapses the GP prior into the observation model:
+
+```math
+\\tilde{\\phi}(y, x, \\mathbf{v}, w, \\boldsymbol{\\theta})
+= \\exp\\!\\bigl(-\\tfrac{1}{2}\\, w\\, A_u(x, \\boldsymbol{\\theta})\\bigr)\\;
+  \\mathcal{N}\\!\\bigl(y \\mid b_u(x, \\mathbf{v}, \\boldsymbol{\\theta}),\\; w^{-1}\\bigr)
+```
+
+where ``b_u = m(x) + \\mathbf{k}_{xu}^\\top(\\mathbf{v} - K_{uu}^{-1}\\mathbf{m}_u)``
+and ``A_u = k(x,x) - \\mathbf{k}_{xu}^\\top K_{uu}^{-1} \\mathbf{k}_{xu}``.
+
+**Edges:** `[out, in, v, w, θ]` — output, input, transformed inducing variable, noise precision, kernel hyperparameters.
+"""
 struct UniSGP end 
 
 @node UniSGP Stochastic [ out, in, v , w, θ] # out: output, in: input,  v: transformed-inducing points Kuu_inv * u , w: precision of process noise 

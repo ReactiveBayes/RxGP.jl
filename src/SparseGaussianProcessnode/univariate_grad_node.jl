@@ -3,6 +3,29 @@
 
 export UniSGP_dID
 
+"""
+    UniSGP_dID
+
+Decoupled inter-domain variational sparse Gaussian process (dID-VSGP) factor
+node. Generalises [`UniSGP`](@ref) by applying an arbitrary deterministic
+linear operator ``\\mathcal{L}`` to the latent GP, so that observations live in
+the transformed space ``\\tilde{f}(x) = \\mathcal{L} f(x) \\in \\mathbb{R}^P``.
+
+The composite node function is:
+
+```math
+\\tilde{\\phi}(\\tilde{\\mathbf{y}}, x, \\mathbf{v}, W, \\boldsymbol{\\theta})
+= \\exp\\!\\Bigl(-\\tfrac{1}{2}\\operatorname{tr}\\bigl(W\\,\\tilde{A}_u(x, \\boldsymbol{\\theta})\\bigr)\\Bigr)\\;
+  \\mathcal{N}\\!\\bigl(\\tilde{\\mathbf{y}} \\mid \\tilde{b}_u(x, \\mathbf{v}, \\boldsymbol{\\theta}),\\; W^{-1}\\bigr)
+```
+
+where ``\\tilde{b}_u = \\tilde{m}(x) + \\tilde{K}_{xu}(\\mathbf{v} - K_{uu}^{-1}\\mathbf{m}_u)``
+and ``\\tilde{A}_u = \\tilde{K}_{xx'} - \\tilde{K}_{xu} K_{uu}^{-1} \\tilde{K}_{ux}``
+with transformed kernels ``\\tilde{K}_{xu} = \\mathcal{L}_1 k(x, X_u)``, etc.
+Inducing variables ``\\mathbf{v}`` remain in the latent (untransformed) space.
+
+**Edges:** `[out, in, v, Wg, θ]` — output, input, transformed inducing variable, Wishart noise precision, kernel hyperparameters.
+"""
 struct UniSGP_dID end 
 
 @node UniSGP_dID Stochastic [ out, in, v , Wg, θ] # out: output, in: input,  v: transformed-inducing points Kuu_inv * u , Wg: precision of process noise 
