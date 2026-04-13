@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Usage walkthrough · RxGP.jl</title><meta name="title" content="Usage walkthrough · RxGP.jl"/><meta property="og:title" content="Usage walkthrough · RxGP.jl"/><meta property="twitter:title" content="Usage walkthrough · RxGP.jl"/><meta name="description" content="Documentation for RxGP.jl."/><meta property="og:description" content="Documentation for RxGP.jl."/><meta property="twitter:description" content="Documentation for RxGP.jl."/><meta property="og:url" content="https://ReactiveBayes.github.io/RxGP.jl/examples/usage/"/><meta property="twitter:url" content="https://ReactiveBayes.github.io/RxGP.jl/examples/usage/"/><link rel="canonical" href="https://ReactiveBayes.github.io/RxGP.jl/examples/usage/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/header.css" rel="stylesheet" type="text/css"/><script src="../../assets/header.js"></script><link href="../../assets/theme.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RxGP.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">User guide</span><ul><li><a class="tocitem" href="../../manuals/getting-started/">Getting started</a></li></ul></li><li><span class="tocitem">Library</span><ul><li><a class="tocitem" href="../../library/nodes/">Factor nodes</a></li><li><a class="tocitem" href="../../library/meta/">Meta objects</a></li><li><a class="tocitem" href="../../library/kernels/">Kernel specification</a></li><li><a class="tocitem" href="../../library/approximation/">Approximation methods</a></li><li><a class="tocitem" href="../../library/prediction/">Prediction</a></li><li><a class="tocitem" href="../../library/cache/">Cache utilities</a></li><li><a class="tocitem" href="../../library/helpers/">Helper utilities</a></li><li><a class="tocitem" href="../../library/types/">Type aliases</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../overview/">Notebook examples</a></li><li class="is-active"><a class="tocitem" href>Usage walkthrough</a><ul class="internal"><li><a class="tocitem" href="#GP-Regression-with-Function-Observations"><span>GP Regression with Function Observations</span></a></li><li><a class="tocitem" href="#Adding-Gradient-Observations"><span>Adding Gradient Observations</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../contributing/guide/">Contributing</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Usage walkthrough</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Usage walkthrough</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/ReactiveBayes/RxGP.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/ReactiveBayes/RxGP.jl/blob/main/docs/src/examples/usage.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="examples-usage"><a class="docs-heading-anchor" href="#examples-usage">Usage Examples</a><a id="examples-usage-1"></a><a class="docs-heading-anchor-permalink" href="#examples-usage" title="Permalink"></a></h1><p>This page contains <strong>executable</strong> examples that run during the documentation build. Every code block below is a live <code>@example</code> — the output you see is produced by the actual RxGP code.</p><h2 id="GP-Regression-with-Function-Observations"><a class="docs-heading-anchor" href="#GP-Regression-with-Function-Observations">GP Regression with Function Observations</a><a id="GP-Regression-with-Function-Observations-1"></a><a class="docs-heading-anchor-permalink" href="#GP-Regression-with-Function-Observations" title="Permalink"></a></h2><p>A minimal sparse GP regression using <a href="../../library/nodes/#RxGP.UniSGP"><code>UniSGP</code></a> nodes.</p><h3 id="1.-Generate-synthetic-data"><a class="docs-heading-anchor" href="#1.-Generate-synthetic-data">1. Generate synthetic data</a><a id="1.-Generate-synthetic-data-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Generate-synthetic-data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using RxInfer, RxGP
+using BayesBase
+using KernelFunctions, LinearAlgebra, Random, Plots, StableRNGs
+
+rng = StableRNG(42)
+N  = 30
+Nu = 20
+
+# Training data: noisy sinc
+xtrain = sort(rand(rng, N) .* 8 .- 4)
+ytrain = sinc.(xtrain) .+ 0.05 .* randn(rng, N)
+
+# Inducing inputs: evenly spaced
+Xu = [[x] for x in range(-4, 4; length=Nu)]
+
+# Test grid for prediction
+xtest = [[x] for x in range(-6, 6; length=200)]
+
+scatter(xtrain, ytrain, label=&quot;Observations&quot;, xlabel=&quot;x&quot;, ylabel=&quot;y&quot;, legend=:topright)
+plot!(range(-6, 6; length=200), sinc.(range(-6, 6; length=200)),
+      label=&quot;True sinc(x)&quot;, lw=2, color=:green)</code></pre><p><img src="../gpr-data.svg" alt="Training data"/></p><h3 id="2.-Configure-the-kernel"><a class="docs-heading-anchor" href="#2.-Configure-the-kernel">2. Configure the kernel</a><a id="2.-Configure-the-kernel-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Configure-the-kernel" title="Permalink"></a></h3><pre><code class="language-julia hljs">D = 1
+mean_fn = (x) -&gt; 0.0
+kernel, θ_init, dim_θ = get_simple_kernel_and_params(D; kernel_spec=:SE)</code></pre><p><code>get_simple_kernel_and_params</code> returns a parameterised squared-exponential kernel.</p><h3 id="3.-Define-the-model"><a class="docs-heading-anchor" href="#3.-Define-the-model">3. Define the model</a><a id="3.-Define-the-model-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Define-the-model" title="Permalink"></a></h3><pre><code class="language-julia hljs">@model function gp_regression(y, x, Xu, θ, mv_prior, gamma_prior)
+    v ~ mv_prior
+    w ~ gamma_prior
+    for i in eachindex(y)
+        y[i] ~ UniSGP(x[i], v, w, θ)
+    end
+end
+
+@meta function gpr_meta(; Xu, θ)
+    UniSGP() -&gt; get_UniSGPMeta(D;
+        mean_fn  = mean_fn,
+        kernel   = kernel,
+        operator = :fn,
+        Xu       = Xu,
+        θ        = θ,
+    )
+end
+
+@initialization function gpr_init(q_v_init, q_w_init)
+    q(v) = q_v_init
+    q(w) = q_w_init
+end
+
+gpr_constraints = @constraints begin
+    q(v, w) = q(v)q(w)
+end</code></pre><p>Each <code>UniSGP</code> factor connects an input <code>x[i]</code> and observation <code>y[i]</code> to the shared inducing variables <code>v</code>, noise precision <code>w</code>, and hyperparameters <code>θ</code>. The <code>@meta</code> block tells RxInfer which meta object to attach to each node type.</p><h3 id="4.-Run-inference-with-hyperparameter-optimisation"><a class="docs-heading-anchor" href="#4.-Run-inference-with-hyperparameter-optimisation">4. Run inference with hyperparameter optimisation</a><a id="4.-Run-inference-with-hyperparameter-optimisation-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Run-inference-with-hyperparameter-optimisation" title="Permalink"></a></h3><p>We alternate between VMP inference (E-step) and gradient-based hyperparameter updates (M-step):</p><pre><code class="language-julia hljs">using Flux, ForwardDiff
+
+optimizer = Flux.AdaMax(0.01)
+state = Flux.setup(optimizer, θ_init)
+θ_opt = deepcopy(θ_init)
+grad  = similar(θ_opt)
+
+q_v = MvNormalWeightedMeanPrecision(zeros(Nu), 50 * diageye(Nu))
+q_w = GammaShapeRate(1e-2, 1e-2)
+
+FE_history = Float64[]
+θ_history  = Vector{Float64}[]   # track hyperparameters
+
+for run in 1:15
+    global q_v, q_w
+    # E-step: run VMP inference (feed previous posterior as prior)
+    res = infer(
+        model          = gp_regression(Xu=Xu, θ=θ_opt, mv_prior=q_v, gamma_prior=q_w),
+        data           = (y=ytrain, x=[[x] for x in xtrain]),
+        meta           = gpr_meta(Xu=Xu, θ=θ_opt),
+        initialization = gpr_init(q_v, q_w),
+        constraints    = gpr_constraints,
+        returnvars     = KeepLast(),
+        iterations     = 2,
+        free_energy    = true,
+    )
+    q_v = res.posteriors[:v]
+    q_w = res.posteriors[:w]
+    push!(FE_history, res.free_energy[end])
+    push!(θ_history, copy(θ_opt))
+
+    # M-step: optimise kernel hyperparameters
+    for epoch in 1:10
+        grad_llh_default!(grad, θ_opt;
+            y_data    = ytrain,
+            x_y_data  = [[x] for x in xtrain],
+            x_ω_data  = [[x] for x in xtrain],
+            q_v       = q_v,
+            q_w       = q_w,
+            kernel    = kernel,
+            mean_fn   = mean_fn,
+            Xu        = Xu,
+        )
+        Flux.Optimise.update!(state, θ_opt, grad)
+    end
+end
+
+using StatsFuns
+θ_mat = reduce(hcat, θ_history)&#39;  # runs × params
+
+p1 = plot(FE_history, xlabel=&quot;Run&quot;, ylabel=&quot;Free Energy&quot;, label=&quot;FE&quot;, lw=2, left_margin=8Plots.mm, bottom_margin=6Plots.mm)
+p2 = plot(xlabel=&quot;Run&quot;, ylabel=&quot;softplus(θ)&quot;, title=&quot;Hyperparameters&quot;, left_margin=8Plots.mm, bottom_margin=6Plots.mm)
+for j in 1:size(θ_mat, 2)
+    plot!(p2, StatsFuns.softplus.(θ_mat[:, j]), label=&quot;θ$j&quot;, lw=2)
+end
+plot(p1, p2, layout=(1,2), size=(900, 320))</code></pre><p><img src="../gpr-fe.svg" alt="Free energy and hyperparameter convergence"/></p><h3 id="5.-Predict-on-the-test-grid"><a class="docs-heading-anchor" href="#5.-Predict-on-the-test-grid">5. Predict on the test grid</a><a id="5.-Predict-on-the-test-grid-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Predict-on-the-test-grid" title="Permalink"></a></h3><pre><code class="language-julia hljs">meta_fn = get_UniSGPMeta(D;
+    mean_fn=mean_fn, kernel=kernel,
+    operator=:fn, Xu=Xu, θ=θ_opt)
+
+means, covs = predict_GP(
+    m_in = xtest,
+    q_v  = q_v,
+    q_θ  = θ_opt,
+    meta = meta_fn,
+)
+
+pred_μ = [m[1] for m in means]
+pred_σ = [sqrt(C[1,1]) for C in covs]
+
+plot(range(-6, 6; length=200), pred_μ, ribbon=pred_σ, fillalpha=0.2,
+     label=&quot;Prediction ± 1σ&quot;, lw=2, color=:blue, xlabel=&quot;x&quot;, ylabel=&quot;y&quot;,
+     legend=:topright)
+plot!(range(-6, 6; length=200), sinc.(range(-6, 6; length=200)),
+      label=&quot;True sinc(x)&quot;, lw=2, color=:green)
+scatter!(xtrain, ytrain, label=&quot;Observations&quot;, ms=3, color=:black)</code></pre><p><img src="../gpr-pred.svg" alt="GP regression prediction"/></p><hr/><h2 id="Adding-Gradient-Observations"><a class="docs-heading-anchor" href="#Adding-Gradient-Observations">Adding Gradient Observations</a><a id="Adding-Gradient-Observations-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-Gradient-Observations" title="Permalink"></a></h2><p>The <a href="../../library/nodes/#RxGP.UniSGP_dID"><code>UniSGP_dID</code></a> node extends the model to observe <strong>gradients</strong> of the latent GP. We add gradient measurements using <code>operator = :grad</code> and a Wishart noise prior.</p><h3 id="1.-Generate-gradient-data"><a class="docs-heading-anchor" href="#1.-Generate-gradient-data">1. Generate gradient data</a><a id="1.-Generate-gradient-data-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Generate-gradient-data" title="Permalink"></a></h3><pre><code class="language-julia hljs"># cosc(x) = d/dx sinc(x) = (cos(πx) - sinc(x)) / x
+cosc(x) = x == 0 ? zero(x) : (cos(π*x) - sinc(x)) / x
+ωtrain = cosc.(xtrain) .+ 0.05 .* randn(rng, N)
+
+xs_plot = range(-6, 6; length=200)
+plot(xs_plot, sinc.(xs_plot), label=&quot;True sinc(x)&quot;, lw=2, color=:green,
+     xlabel=&quot;x&quot;, ylabel=&quot;y&quot;, legend=:topright)
+plot!(xs_plot, cosc.(xs_plot), label=&quot;True cosc(x)&quot;, lw=2, color=:magenta)
+scatter!(xtrain, ytrain, label=&quot;Value obs&quot;)
+scatter!(xtrain, ωtrain, label=&quot;Gradient obs&quot;, marker=:cross)</code></pre><p><img src="../gpr-grad-data.svg" alt="Function and gradient data"/></p><h3 id="2.-Build-a-joint-model"><a class="docs-heading-anchor" href="#2.-Build-a-joint-model">2. Build a joint model</a><a id="2.-Build-a-joint-model-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Build-a-joint-model" title="Permalink"></a></h3><pre><code class="language-julia hljs">meta_grad = get_UniSGPMeta(D;
+    mean_fn  = mean_fn,
+    kernel   = kernel,
+    operator = :grad,
+    Xu       = Xu,
+    θ        = θ_init,
+)
+
+@model function gp_regression_with_grads(y, ω, x, Xu, θ, qv_params, qw_params, qWg_params)
+    v  ~ MvNormalWeightedMeanPrecision(qv_params...)
+    w  ~ GammaShapeRate(qw_params...)
+    Wg ~ Wishart(qWg_params...)
+    for i in eachindex(y)
+        y[i] ~ UniSGP(x[i], v, w, θ)
+        ω[i] ~ UniSGP_dID(x[i], v, Wg, θ)
+    end
+end</code></pre><p>The <code>UniSGP</code> and <code>UniSGP_dID</code> nodes share the same inducing variables <code>v</code> and hyperparameters <code>θ</code>, allowing the function-value and gradient observations to jointly inform the GP.</p><h3 id="3.-Infer-and-predict-with-joint-operator"><a class="docs-heading-anchor" href="#3.-Infer-and-predict-with-joint-operator">3. Infer and predict with joint operator</a><a id="3.-Infer-and-predict-with-joint-operator-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Infer-and-predict-with-joint-operator" title="Permalink"></a></h3><pre><code class="language-julia hljs">gp_constraints_joint = @constraints begin
+    q(v, w, Wg) = q(v)q(w)q(Wg)
+end
+
+@meta function joint_meta(; Xu, θ)
+    UniSGP()     -&gt; get_UniSGPMeta(D;
+        mean_fn=mean_fn, kernel=kernel,
+        operator=:fn, Xu=Xu, θ=θ)
+    UniSGP_dID() -&gt; get_UniSGPMeta(D;
+        mean_fn=mean_fn, kernel=kernel,
+        operator=:grad, Xu=Xu, θ=θ)
+end
+
+@initialization function joint_init(qv_params, qw_params, qWg_params)
+    q(v)  = MvNormalWeightedMeanPrecision(qv_params...)
+    q(w)  = GammaShapeRate(qw_params...)
+    q(Wg) = Wishart(qWg_params...)
+end
+
+# Build operator functions for the gradient hyperparameter objective
+meta_grad_obj = get_UniSGPMeta(D; mean_fn=mean_fn, kernel=kernel, operator=:grad, Xu=Xu, θ=θ_opt)
+Lm_fn  = getLm_fn(meta_grad_obj)
+Kxx_fn = getKxx_fn(meta_grad_obj)
+Kxu_fn = getKxu_fn(meta_grad_obj)
+
+θ_joint = deepcopy(θ_opt)
+state_j = Flux.setup(Flux.AdaMax(0.01), θ_joint)
+grad_j  = similar(θ_joint)
+
+q_v_j  = MvNormalWeightedMeanPrecision(zeros(Nu), 50 * diageye(Nu))
+q_w_j  = GammaShapeRate(1e-2, 1e-2)
+q_Wg_j = Wishart(1, Matrix(1.0I, 1, 1))
+
+FE_joint = Float64[]
+θ_joint_history = Vector{Float64}[]
+
+for run in 1:15
+    global q_v_j, q_w_j, q_Wg_j
+    # Feed previous posteriors as priors
+    res_j = infer(
+        model          = gp_regression_with_grads(
+            Xu=Xu,
+            θ=θ_joint,
+            qv_params=BayesBase.params(q_v_j),
+            qw_params=BayesBase.params(q_w_j),
+            qWg_params=BayesBase.params(q_Wg_j),
+        ),
+        data           = (y=ytrain, ω=[[ω] for ω in ωtrain], x=[[x] for x in xtrain]),
+        meta           = joint_meta(Xu=Xu, θ=θ_joint),
+        initialization = joint_init(
+            BayesBase.params(q_v_j),
+            BayesBase.params(q_w_j),
+            BayesBase.params(q_Wg_j),
+        ),
+        constraints    = gp_constraints_joint,
+        returnvars     = KeepLast(),
+        iterations     = 2,
+        free_energy    = true,
+    )
+    q_v_j  = res_j.posteriors[:v]
+    q_w_j  = res_j.posteriors[:w]
+    q_Wg_j = res_j.posteriors[:Wg]
+    push!(FE_joint, res_j.free_energy[end])
+    push!(θ_joint_history, copy(θ_joint))
+
+    for epoch in 1:10
+        grad_llh_default!(grad_j, θ_joint;
+            y_data   = ytrain,
+            ω_data   = [[ω] for ω in ωtrain],
+            x_y_data = [[x] for x in xtrain],
+            x_ω_data = [[x] for x in xtrain],
+            q_v      = q_v_j,
+            q_w      = q_w_j,
+            q_Wg     = q_Wg_j,
+            kernel   = kernel,
+            Lm_fn    = Lm_fn,
+            Kxx_fn   = Kxx_fn,
+            Kxu_fn   = Kxu_fn,
+            mean_fn  = mean_fn,
+            Xu       = Xu,
+        )
+        Flux.Optimise.update!(state_j, θ_joint, grad_j)
+    end
+end
+
+θj_mat = reduce(hcat, θ_joint_history)&#39;
+pj1 = plot(FE_joint, xlabel=&quot;Run&quot;, ylabel=&quot;Free Energy&quot;, label=&quot;FE&quot;, lw=2, left_margin=8Plots.mm, bottom_margin=6Plots.mm)
+pj2 = plot(xlabel=&quot;Run&quot;, ylabel=&quot;softplus(θ)&quot;, title=&quot;Hyperparameters&quot;, left_margin=8Plots.mm, bottom_margin=6Plots.mm)
+for j in 1:size(θj_mat, 2)
+    plot!(pj2, StatsFuns.softplus.(θj_mat[:, j]), label=&quot;θ$j&quot;, lw=2)
+end
+plot(pj1, pj2, layout=(1,2), size=(900, 320))</code></pre><p><img src="../gpr-joint-fe.svg" alt="Joint model free energy and hyperparameters"/></p><pre><code class="language-julia hljs"># Predict with the joint_fn_grad operator to get both function and gradient predictions
+meta_joint = get_UniSGPMeta(D;
+    mean_fn  = mean_fn,
+    kernel   = kernel,
+    operator = :joint_fn_grad,
+    Xu       = Xu,
+    θ        = θ_joint,
+)
+means_j, covs_j = predict_GP(
+    m_in = xtest,
+    q_v  = q_v_j,
+    q_θ  = θ_joint,
+    meta = meta_joint,
+)
+
+pred_f_μ = [m[1] for m in means_j]
+pred_f_σ = [sqrt(C[1,1]) for C in covs_j]
+pred_g_μ = [m[2] for m in means_j]
+pred_g_σ = [sqrt(C[2,2]) for C in covs_j]
+
+xs = range(-6, 6; length=200)
+
+p = plot(layout=(1,2), size=(900, 350), legend=:topright)
+plot!(p[1], xs, pred_f_μ, ribbon=pred_f_σ, fillalpha=0.2,
+      label=&quot;f(x) pred&quot;, lw=2, color=:blue, xlabel=&quot;x&quot;, ylabel=&quot;f(x)&quot;)
+plot!(p[1], xs, sinc.(xs), label=&quot;True sinc&quot;, lw=2, color=:green)
+scatter!(p[1], xtrain, ytrain, label=&quot;Value obs&quot;, ms=3, color=:black)
+
+plot!(p[2], xs, pred_g_μ, ribbon=pred_g_σ, fillalpha=0.2,
+      label=&quot;∇f(x) pred&quot;, lw=2, color=:red, xlabel=&quot;x&quot;, ylabel=&quot;∇f(x)&quot;)
+plot!(p[2], xs, cosc.(xs), label=&quot;True cosc&quot;, lw=2, color=:magenta)
+scatter!(p[2], xtrain, ωtrain, label=&quot;Grad obs&quot;, ms=3, marker=:cross, color=:black)</code></pre><p><img src="../gpr-joint-pred.svg" alt="Joint function and gradient prediction"/></p><p>The left panel shows the function prediction and the right panel shows the gradient prediction. Both benefit from the shared inducing variables.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../overview/">« Notebook examples</a><a class="docs-footer-nextpage" href="../../contributing/guide/">Contributing »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 13 April 2026 13:44">Monday 13 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
