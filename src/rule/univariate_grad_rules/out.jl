@@ -20,5 +20,5 @@
 
     μ_ω = Ωx + Ω1 * (μ_v - Ku_mxu)
 
-    return meta.dims_data == 1 ? NormalMeanPrecision(only(μ_ω), only(Wg_bar)) : MvNormalMeanPrecision(μ_ω, Wg_bar)
+    return get_dims_output(meta) == 1 ? NormalMeanPrecision(only(μ_ω), only(Wg_bar)) : MvNormalMeanPrecision(μ_ω, Wg_bar)
 end

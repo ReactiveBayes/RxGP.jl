@@ -61,7 +61,8 @@ getKxx_fn
 getKxu_fn
 getKuuF
 getKernel
-get_dims_data
+get_dims_input
+get_dims_output
 get_dims_theta
 getUv
 getcounter

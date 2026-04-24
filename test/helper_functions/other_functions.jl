@@ -160,7 +160,7 @@ end
     Xu = ctx.Xu
 
     # composing meta as per get_UniSGPMeta
-    dims_data = D
+    dims_input = D
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
     KuuF = cholesky(Kuu)
     x_dummy = zeros(D)
@@ -193,7 +193,8 @@ end
     @test getKxu_fn(meta)(x_dummy, θ, Xu) == Kxu_val
     @test getKuuF(meta) == KuuF
     @test getKernel(meta) == kernel
-    @test get_dims_data(meta) == D
+    @test get_dims_input(meta) == D
+    @test get_dims_output(meta) == D # because grad operator
     @test get_dims_theta(meta) == dims_theta
     @test getUv(meta) == Uv
     @test getcounter(meta) == counter

@@ -35,5 +35,5 @@
 
     log_backwardmess = (x) -> partA(x) + partB(x) + partC(x)
 
-    return get_dims_data(meta) < 2 ? ContinuousUnivariateLogPdf(log_backwardmess) : ContinuousMultivariateLogPdf(UnspecifiedDomain(), log_backwardmess)
+    return get_dims_input(meta) < 2 ? ContinuousUnivariateLogPdf(log_backwardmess) : ContinuousMultivariateLogPdf(UnspecifiedDomain(), log_backwardmess)
 end
