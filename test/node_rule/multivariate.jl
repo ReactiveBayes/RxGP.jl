@@ -263,8 +263,8 @@ end
     I2 = μ_y * μ_y' + Σ_y - μ_y * μ_v' * Ψ1_tilde' - Ψ1_tilde * μ_v * μ_y' + Ψ4_approx 
     U_gt = 0.5 * tr(W_mean * (I1 + I2)) + length(mean(q_out))/2 * log(2π) - 0.5 * E_logdet_W
     Multimeta = MultiSGPMeta(method, Xu_2d,[1.0;;],kernelmatrix(kernel(θ_val),Xu_2d,[Xu_2d[1]]),kernelmatrix(kernel(θ_val),Xu_2d,[Xu_2d[1]]) * kernelmatrix(kernel(θ_val),[Xu_2d[1]],Xu_2d) + 1e-12*I,cholinv(kernelmatrix(kernel(θ_val),Xu_2d) + 1e-12*I), kernel, GPCache())
-    marginals = (Marginal(q_out, false, false, nothing), Marginal(q_in, false, false, nothing), 
-        Marginal(q_v, false, false, nothing),Marginal(q_w, false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(q_out, false, false), Marginal(q_in, false, false), 
+        Marginal(q_v, false, false),Marginal(q_w, false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), MultiSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Multimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt; atol = 1e-2)
@@ -277,8 +277,8 @@ end
     I1 = kron(C, Ψ0_approx - tr(Kuu_inverse * Ψ2_approx))
     I2 = μ_y_pm * μ_y_pm' - μ_y_pm * μ_v' * Ψ1_tilde' - Ψ1_tilde * μ_v * μ_y_pm' + Ψ4_approx 
     U_gt = 0.5 * tr(W_mean * (I1 + I2)) + length(μ_y_pm)/2 * log(2π) - 0.5 * log(det(W_mean))
-    marginals = (Marginal(q_out_pm, false, false, nothing), Marginal(q_in, false, false, nothing), 
-        Marginal(q_v, false, false, nothing),Marginal(q_w_pm, false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(q_out_pm, false, false), Marginal(q_in, false, false), 
+        Marginal(q_v, false, false),Marginal(q_w_pm, false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), MultiSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Multimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt; atol = 1e-2)

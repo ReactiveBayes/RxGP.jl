@@ -404,8 +404,8 @@ end
     )
     
     U_gt = 0.5 * log(2π) - 0.5 * E_logw + 0.5 * mean(q_w) * (I1 + I4)
-    marginals = (Marginal(q_out, false, false, nothing), Marginal(q_in, false, false, nothing), 
-                Marginal(q_v, false, false, nothing),Marginal(q_w, false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(q_out, false, false), Marginal(q_in, false, false), 
+                Marginal(q_v, false, false),Marginal(q_w, false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), UniSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Unimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt; atol=1e-5)
@@ -426,8 +426,8 @@ end
         - 2 * transpose(μ_v) * Ψ2_approx * Ku_mxu
     )
     U_gt = 0.5 * log(2π) - 0.5 * log(w) + 0.5 * w * (I1 + I4)
-    marginals = (Marginal(q_out, false, false, nothing), Marginal(q_in, false, false, nothing), 
-                Marginal(q_v, false, false, nothing),Marginal(PointMass(w), false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(q_out, false, false), Marginal(q_in, false, false), 
+                Marginal(q_v, false, false),Marginal(PointMass(w), false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), UniSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Unimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt;atol=1e-5)
@@ -455,8 +455,8 @@ end
         - 2 * transpose(μ_v) * Ψ2 * Ku_mxu
     )
     U_gt = 0.5 * log(2π) - 0.5 * E_logw + 0.5 * mean(q_w) * (I1 + I4)
-    marginals = (Marginal(PointMass(2.0), false, false, nothing), Marginal(PointMass(1.0), false, false, nothing), 
-                Marginal(q_v, false, false, nothing),Marginal(q_w, false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(PointMass(2.0), false, false), Marginal(PointMass(1.0), false, false), 
+                Marginal(q_v, false, false),Marginal(q_w, false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), UniSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Unimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt; atol = 1e-5)
@@ -476,8 +476,8 @@ end
         - 2 * transpose(μ_v) * Ψ2 * Ku_mxu
     )
     U_gt = 0.5 * log(2π) - 0.5 * E_logw + 0.5 * mean(q_w) * (I1 + I4)
-    marginals = (Marginal(q_out, false, false, nothing), Marginal(PointMass(1.0), false, false, nothing), 
-                Marginal(q_v, false, false, nothing),Marginal(q_w, false, false, nothing),Marginal(q_θ, false, false, nothing))
+    marginals = (Marginal(q_out, false, false), Marginal(PointMass(1.0), false, false), 
+                Marginal(q_v, false, false),Marginal(q_w, false, false),Marginal(q_θ, false, false))
     U_from_node = score(AverageEnergy(), UniSGP, Val{(:out, :in, :v, :w, :θ)}(), marginals, Unimeta)
     @test typeof(U_from_node) <: Float64
     @test isapprox(U_from_node, U_gt; atol = 1e-5)

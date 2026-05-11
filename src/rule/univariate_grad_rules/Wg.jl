@@ -7,7 +7,7 @@
     mf = getMeanFn(meta)
     mxu = apply_mean_fn.(meta.Xu, mf)
     Ku_mxu = meta.KuuF \ mxu
-    D = get_dims_data(meta)
+    D = get_dims_input(meta)
     Rv = μ_v * transpose(μ_v) + Σ_v
     Lm_fn = getLm_fn(meta)
     Kxx_fn = getKxx_fn(meta)

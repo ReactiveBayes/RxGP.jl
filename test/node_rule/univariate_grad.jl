@@ -324,11 +324,11 @@ end
     U_gt = 0.5 * tr(Wg_bar * (G1 + G2)) + (ctx.D / 2) * log(2π) - 0.5 * E_logWg
 
     marginals = (
-        Marginal(ctx.q_out, false, false, nothing),
-        Marginal(ctx.q_in, false, false, nothing),
-        Marginal(ctx.q_v, false, false, nothing),
-        Marginal(ctx.q_Wg, false, false, nothing),
-        Marginal(ctx.q_θ, false, false, nothing)
+        Marginal(ctx.q_out, false, false),
+        Marginal(ctx.q_in, false, false),
+        Marginal(ctx.q_v, false, false),
+        Marginal(ctx.q_Wg, false, false),
+        Marginal(ctx.q_θ, false, false)
     )
 
     U_node = score(AverageEnergy(), UniSGP_dID, Val{(:out, :in, :v, :Wg, :θ)}(), marginals, meta)

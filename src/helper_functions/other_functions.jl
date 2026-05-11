@@ -94,6 +94,7 @@ function get_UniSGPMeta(D; method=ghcubature(21), mean_fn, kernel, kernel_spec::
                          Lm_fn=nothing, Kxu_fn=nothing, Kxx_fn=nothing)
     θ = typeof(θ) <: PointMass ? mean(θ) : θ
     dims_theta = length(θ)
+    dims_input = D
     Kuu = kernelmatrix(kernel(θ), Xu) + 1e-8 * I
     KuuF = cholesky(Kuu)
     x_dummy = zeros(D)
@@ -106,18 +107,18 @@ function get_UniSGPMeta(D; method=ghcubature(21), mean_fn, kernel, kernel_spec::
     Uv = zeros(size(Xu, 1), size(Xu, 1))
 
     if Lm_fn === nothing || Kxu_fn === nothing || Kxx_fn === nothing
-        (Lm_fn_default, Kxu_fn_default, Kxx_fn_default, dims_data) =
+        (Lm_fn_default, Kxu_fn_default, Kxx_fn_default, dims_output) =
             _build_operator_fns(D; mean_fn=mean_fn, kernel=kernel, kernel_spec=kernel_spec,
                                 mode=mode, operator=operator, independent_SE_lengthscales=independent_SE_lengthscales)
         Lm_fn  = Lm_fn  === nothing ? Lm_fn_default  : Lm_fn
         Kxu_fn = Kxu_fn === nothing ? Kxu_fn_default : Kxu_fn
         Kxx_fn = Kxx_fn === nothing ? Kxx_fn_default : Kxx_fn
     else
-        # All three provided manually — infer dims_data from a test call
-        dims_data = length(Lm_fn(x_dummy))
+        # All three provided manually — infer dims_output from a test call
+        dims_output = length(Lm_fn(x_dummy))
     end
 
-    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Lm_fn, Kxx_fn, Kxu_fn, KuuF, kernel, dims_data, dims_theta, Uv, 0, 1)
+    return UniSGPMeta(method, mean_fn, Xu, Ψx, Ψxx, Ψ0, Ψ1_trans, Ψ2, Ψ3, Lm_fn, Kxx_fn, Kxu_fn, KuuF, kernel, dims_input, dims_output, dims_theta, Uv, 0, 1)
 end
 
 

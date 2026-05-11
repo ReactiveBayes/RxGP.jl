@@ -1,5 +1,5 @@
 export UniSGPMeta, MultiSGPMeta
-export getmethod, getMeanFn, getInducingInput, getΨx, getΨxx, getΨ0, getΨ1_trans, getΨ2, getΨ3, getLm_fn, getKxx_fn, getKxu_fn, getKuuF, getKernel, get_dims_data, get_dims_theta, getUv, getcounter, getN
+export getmethod, getMeanFn, getInducingInput, getΨx, getΨxx, getΨ0, getΨ1_trans, getΨ2, getΨ3, getLm_fn, getKxx_fn, getKxu_fn, getKuuF, getKernel, get_dims_input, get_dims_output, get_dims_theta, getUv, getcounter, getN
 export getKuuInverse, getGPCache
 
 #---- Define metas -----# 
@@ -27,7 +27,8 @@ mutable struct UniSGPMeta{I,E,D,C,CF,K}
     Kxu_fn          :: C        # L1*k(x,Xu):   operated cross-kernel
     KuuF            :: CF
     kernel          :: K
-    dims_data       :: Int      # P: output dimension under the linear operator
+    dims_input      :: Int      # D: input dimension
+    dims_output     :: Int      # P: output dimension under the linear operator
     dims_theta      :: Int
     Uv              :: Matrix{Float64}
     counter         :: Int
@@ -63,7 +64,9 @@ getKuuF(meta::UniSGPMeta) = meta.KuuF
 """Return the kernel constructor ``\\theta \\mapsto k``."""
 getKernel(meta::UniSGPMeta) = meta.kernel
 """Return the output dimension ``P`` under the linear operator."""
-get_dims_data(meta::UniSGPMeta) = meta.dims_data
+get_dims_output(meta::UniSGPMeta) = meta.dims_output
+"""Return the input dimension ``D``."""
+get_dims_input(meta::UniSGPMeta) = meta.dims_input
 """Return the number of kernel hyperparameters."""
 get_dims_theta(meta::UniSGPMeta) = meta.dims_theta
 """Return the Cholesky factor of the second moment of ``\\mathbf{v}``."""
