@@ -9,7 +9,7 @@ include("helper_functions/univariate_prediction_fns.jl")
 
 include("node_rule/multivariate.jl")
 include("node_rule/univariate.jl")
-include("node_rule/univariate_grad.jl")
+include("node_rule/univariate_dID.jl")
 
 # Run all registered test items when using Pkg.test()
 @run_package_tests

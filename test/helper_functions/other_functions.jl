@@ -146,7 +146,7 @@ end
     @test size(Σ) == (2, 2)
 end
 
-@testitem "node_rule/univariate_grad/Test get_UniSGPMeta" setup=[test_snippet] begin
+@testitem "node_rule/univariate_dID/Test get_UniSGPMeta" setup=[test_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     D = ctx.D
@@ -202,7 +202,7 @@ end
 
 end
 
-@testitem "node_rule/univariate_grad/Test gradient mean function (Lm_fn)" setup=[test_snippet] begin
+@testitem "node_rule/univariate_dID/Test gradient mean function (Lm_fn)" setup=[test_snippet] begin
     function num_grad(x_dummy, mean_fn, D)
         ϵ = 1e-6
         numerical_grad = zeros(D)
@@ -242,7 +242,7 @@ end
     @test Lm_fn(x_dummy) ≈ [2.0, -4.0, 1.0] atol=1e-10
 end
 
-@testitem "node_rule/univariate_grad/Test get_gradient_Kxu_fn" setup=[test_snippet] begin
+@testitem "node_rule/univariate_dID/Test get_gradient_Kxu_fn" setup=[test_snippet] begin
     function num_grad(x_dummy, ctx)
         f = (x) -> kernelmatrix(ctx.kernel(ctx.θ_val), [x], ctx.Xu)
         numerical_grad = zeros(ctx.D, length(ctx.Xu))
@@ -437,7 +437,7 @@ end
 
 end
 
-@testitem "node_rule/univariate_grad/Test get_gradient_Kxx_fn" setup=[test_snippet] begin
+@testitem "node_rule/univariate_dID/Test get_gradient_Kxx_fn" setup=[test_snippet] begin
     function num_hessian(x_dummy, ctx)
         f = (x, x′) -> kernelmatrix(ctx.kernel(ctx.θ_val), [x], [x′])[1, 1]
         H = zeros(ctx.D, ctx.D)
@@ -630,7 +630,7 @@ end
 end
 
 
-@testitem "node_rule/univariate_grad/Test get_simple_kernel_and_params" setup=[test_snippet] begin
+@testitem "node_rule/univariate_dID/Test get_simple_kernel_and_params" setup=[test_snippet] begin
 
     GT_SE_1_true = [1.3132616875182228;;]
     GT_SE_2_true = [1.3132616875182228;;]

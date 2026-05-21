@@ -21,7 +21,7 @@ include("helper_functions/univariate_prediction_fns.jl")
 
 # node 
 include("SparseGaussianProcessnode/univariate_node.jl")
-include("SparseGaussianProcessnode/univariate_grad_node.jl")
+include("SparseGaussianProcessnode/univariate_dID_node.jl")
 include("SparseGaussianProcessnode/multivariate_node.jl")
 
 # rule
@@ -31,11 +31,11 @@ include("rule/univariate_rules/v.jl")
 include("rule/univariate_rules/w.jl")
 include("rule/univariate_rules/theta.jl")
 
-include("rule/univariate_grad_rules/out.jl")
-include("rule/univariate_grad_rules/in.jl")
-include("rule/univariate_grad_rules/v.jl")
-include("rule/univariate_grad_rules/Wg.jl")
-include("rule/univariate_grad_rules/theta.jl")
+include("rule/univariate_dID_rules/out.jl")
+include("rule/univariate_dID_rules/in.jl")
+include("rule/univariate_dID_rules/v.jl")
+include("rule/univariate_dID_rules/Wg.jl")
+include("rule/univariate_dID_rules/theta.jl")
 
 include("rule/multivariate_rules/out.jl")
 include("rule/multivariate_rules/in.jl")
