@@ -164,7 +164,7 @@ end
     Ω12_gt = mean(Ω12_func.(sample_x))
     Ω13_gt = mean(Ω13_func.(sample_x))
 
-    # univariate_grad approx expectations
+    # univariate_dID approx expectations
     Ωx_approx = approximate_kernel_expectation(meta.method, (x) -> Lm_fn(x), q_x)
     Ω0_approx = approximate_kernel_expectation(meta.method, (x) -> Kxx_fn(x, θ_val), q_x)
     Ω1_approx = approximate_kernel_expectation(meta.method, (x) -> Kxu_fn(x, θ_val, meta.Xu), q_x)

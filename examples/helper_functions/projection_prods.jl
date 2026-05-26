@@ -2,7 +2,7 @@ using ExponentialFamilyProjection
 
 # This file is intended to be included standalone when working with non-conjugate products in RxInfer.jl.
 # We include it here to showcase our examples that need to combine non-conjugate messages from the univariate
-# and univariate_grad nodes with Guassian priors.
+# and univariate_dID nodes with Guassian priors.
 
 function ReactiveMP.prod(::GenericProd, left::NormalDistributionsFamily, right::Union{ContinuousUnivariateLogPdf, ContinuousMultivariateLogPdf})
     dims = length(left)

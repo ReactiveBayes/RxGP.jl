@@ -1,4 +1,4 @@
-@testsnippet univariate_grad_snippet begin
+@testsnippet univariate_dID_snippet begin
     using RxGP
     using RxInfer
     using ReactiveMP
@@ -40,7 +40,7 @@
     end
 end
 
-@testitem "node_rule/univariate_grad/Test out rule" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test out rule" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     mf = getMeanFn(meta)
@@ -81,7 +81,7 @@ end
     @test isapprox(inv(cov(msg_det)), Wg_bar_det; atol=1e-6)
 end
 
-@testitem "node_rule/univariate_grad/Test in rule" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test in rule" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
@@ -132,7 +132,7 @@ end
 
 end
 
-@testitem "node_rule/univariate_grad/Test v rule" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test v rule" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
@@ -177,7 +177,7 @@ end
     @test isapprox(cov(msg_det.qv), cholinv(W_det); atol=1e-4)
 end
 
-@testitem "node_rule/univariate_grad/Test Wg rule" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test Wg rule" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
@@ -252,7 +252,7 @@ end
     @test isapprox(V_w_det, V_det; atol=1e-6)
 end
 
-@testitem "node_rule/univariate_grad/Test θ rule" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test θ rule" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
@@ -284,7 +284,7 @@ end
     @test isapprox(logpdf(msg, θ_shift_2), slow_log(θ_shift_2); atol=1e-7)
 end
 
-@testitem "node_rule/univariate_grad/Test average energy" setup=[univariate_grad_snippet] begin
+@testitem "node_rule/univariate_dID/Test average energy" setup=[univariate_dID_snippet] begin
     ctx = test_fixture(D=3)
     meta = ctx.meta
     θ = ctx.θ_val
